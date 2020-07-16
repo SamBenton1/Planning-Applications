@@ -6,13 +6,11 @@ import os
 import json
 from datetime import date
 import application_request
-import threading
 import time
 import concurrent.futures
 from select_reference import *
 
 # DEVELOPMENT: Issues to test:
-#   - No file name
 #   - No internet connection
 
 
@@ -47,7 +45,21 @@ class Search(QtCore.QRunnable):
     def run(self):
         # Create search instance
         ap_request = application_request.ApplicationRequest(params=self.request)
-        self.signals.message.emit(ap_request.createSession())
+
+        session_creation = ap_request.createSession()
+        if session_creation:
+            self.signals.message.emit(session_creation)
+            self.signals.progress.emit(10)
+        else:
+            self.signals.message.emit("No Internet Connection")
+            self.signals.progress.emit(100)
+            self.signals.error.emit(True)
+
+            # WAIT then remove widget
+            time.sleep(3)
+            self.signals.reset.emit()
+            return
+
         response_valid, response_message = ap_request.searchRequest()
 
         if response_valid:
@@ -56,7 +68,7 @@ class Search(QtCore.QRunnable):
         # If the http response is not valid: return
         else:
             self.signals.message.emit(response_message)
-            self.signals.progress.emit(10)
+            self.signals.progress.emit(100)
             self.signals.error.emit(True)
 
             # WAIT then remove widget
@@ -95,7 +107,7 @@ class Search(QtCore.QRunnable):
 
         # EXTRACT DATA
         ap_request.ExtractData()
-        self.signals.message.emit("Data extracted...")
+        self.signals.message.emit("Search Completed")
         self.signals.progress.emit(100)
 
         self.signals.product.emit(ap_request.all_applications)
@@ -422,7 +434,7 @@ class MainWindow(QMainWindow):
         # Create request
         raw_request = {
             "action": "firstPage",
-            "org.apache.struts.taglib.html.TOKEN": "ff217d74428fe4d6687e6df9b66fa2eb",
+            # "org.apache.struts.taglib.html.TOKEN": "ff217d74428fe4d6687e6df9b66fa2eb",
             "searchCriteria.reference": self.application_reference.text(),
             "searchCriteria.planningPortalReference": self.planning_portal_reference.text(),
             "searchCriteria.alternativeReference": self.alternative_reference.text(),
@@ -464,7 +476,7 @@ class MainWindow(QMainWindow):
         self.scroll_area_contents_layout.addWidget(self.progress_bar_label, 7, 0)
         self.scroll_area_contents_layout.addWidget(self.progress_bar, 8, 0)
         self.progress_bar_label.setText("Searching...")
-        self.progress_bar.setValue(10)
+        self.progress_bar.setValue(5)
 
         # SEARCH THREAD
         search_thread = Search(request)
@@ -484,6 +496,7 @@ class MainWindow(QMainWindow):
             :return:
             """
             self.progress_bar_label.setText(msg)
+            self.progress_bar_label.updateGeometry()
 
         def update_progress_label_error(error):
             """
@@ -502,8 +515,10 @@ class MainWindow(QMainWindow):
             self.scroll_area_contents_layout.removeWidget(self.progress_bar)
 
         def saveFile(all_applications):
-            path = QFileDialog.getSaveFileName(filter="CSV (*.csv)", directory=f"{os.getcwd()}/Search_CSV")
+            path = QFileDialog.getSaveFileName(filter="CSV (*.csv)",
+                                               directory=f"{os.getcwd()}/Output CSV/search results")
             application_request.ApplicationRequest.WriteCSV(path, all_applications)
+            reset_signal()
 
         # CONNECT SIGNAL FUNCTIONS
         search_thread.signals.progress.connect(update_progress)

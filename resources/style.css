@@ -13,7 +13,7 @@ QWidget#section {
 QLabel {
     font-size: 15px;
     font-family: 'Varela Round', sans-serif;
-    max-width: 300px;
+    /* max-width: 300px; */
 }
 
 QLabel#title {

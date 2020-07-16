@@ -1,10 +1,17 @@
 import requests
-import json
 from bs4 import BeautifulSoup
-import threading
-import concurrent.futures
 import itertools
 
+
+# FIXME: This Search
+#     {
+#       "action": "firstPage",
+#       "searchCriteria.conservationArea": "CA14",
+#       "caseAddressType": "Application",
+#       "date(applicationValidatedStart)": "15/05/2020",
+#       "date(applicationValidatedEnd)": "16/07/2020",
+#       "searchType": "Application"
+#     }
 
 class ApplicationRequest(object):
     simple_search = r"https://boppa.poole.gov.uk/online-applications/simpleSearchResults.do"
@@ -32,7 +39,12 @@ class ApplicationRequest(object):
     def createSession(self):
         self.session = requests.Session()
         search_url = r"https://boppa.poole.gov.uk/online-applications/search.do?action=advanced&searchType=Application"
-        response = self.session.get(search_url)
+        try:
+            response = self.session.get(search_url)
+        except requests.exceptions.ConnectionError:
+            print("No Internet Connection")
+            return None
+
         return "Started Session..."
 
     # STEP 1
@@ -50,10 +62,6 @@ class ApplicationRequest(object):
 
         # Make the get request
         response = self.session.get(self.URL, params=self.request_params)
-
-        # TODO: Check these can be removed from following searches
-        # self.Response_Header = dict(response.headers)
-        # self.Cookie = self.Response_Header.get("Set-Cookie")
 
         # SEND TO RESPONSE CHECK METHOD
         response_valid, response_message = self._checkRequest(response=response)
@@ -106,6 +114,7 @@ class ApplicationRequest(object):
             else:
                 # DEVELOPMENT: Save error html to failed.html
                 with open("failed.html", "w") as error_file:
+                    print("writing error html")
                     error_file.write(response.content.decode("utf-8"))
 
                 return False, "No Error Message found"
@@ -130,6 +139,10 @@ class ApplicationRequest(object):
         # Showing element at the bottom of the page
         soup = BeautifulSoup(page_one_html, "html.parser")
         showing_element = soup.find("span", attrs={"class": "showing"})
+
+        if not showing_element:
+            # FIXME: If less that 10 results cannot gather the number of results
+            return 0
 
         raw_total_applications = showing_element.text
         raw_showing, total_applications = raw_total_applications.split(" of ")
@@ -242,8 +255,6 @@ class ApplicationRequest(object):
         for application_dict in applications:
             csv_line = ",".join(list(application_dict.values())) + "\n"
             out_put_string += csv_line
-        print(path)
-        print(type(path))
         with open(path[0], "w") as outfile:
             outfile.write(out_put_string)
 
@@ -251,11 +262,12 @@ class ApplicationRequest(object):
 def Test():
     request = {
         "action": "firstPage",
+        # "org.apache.struts.taglib.html.TOKEN": "ff217d74428fe4d6687e6df9b66fa2eb",
+        "searchCriteria.conservationArea": "CA25",
         "caseAddressType": "Application",
-        "date(applicationValidatedStart)": "10/06/2020",
-        "date(applicationValidatedEnd)": "16/0020",
-        "searchType": "Application",
-        "searchCriteria.ward": "giuh34  to8"
+        "date(applicationValidatedStart)": "27/04/2020",
+        "date(applicationValidatedEnd)": "16/07/2020",
+        "searchType": "Application"
     }
 
     ap_request = ApplicationRequest(params=request)
