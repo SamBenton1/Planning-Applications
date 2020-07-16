@@ -1,0 +1,9 @@
+venv
+.idea
+__pycache__
+Search_CSV
+
+*.html
+*.ipynb
+
+log.txt
