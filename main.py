@@ -47,6 +47,7 @@ class Search(QtCore.QRunnable):
     def run(self):
         # Create search instance
         ap_request = application_request.ApplicationRequest(params=self.request)
+        self.signals.message.emit(ap_request.createSession())
         response_valid, response_message = ap_request.searchRequest()
 
         if response_valid:

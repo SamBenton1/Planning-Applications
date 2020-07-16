@@ -9,7 +9,9 @@ import itertools
 class ApplicationRequest(object):
     simple_search = r"https://boppa.poole.gov.uk/online-applications/simpleSearchResults.do"
     advance_search = r"https://boppa.poole.gov.uk/online-applications/advancedSearchResults.do"
-    # advance_search = r"http://httpbin.org/get"
+
+    # DEVELOPMENT: send request to http bin:
+    #   advance_search = r"http://httpbin.org/get"
 
     def __init__(self, params, search_type="advanced"):
 
@@ -23,9 +25,15 @@ class ApplicationRequest(object):
         self.request_params = params
 
         # DECLARE ATTRIBUTES
-        self.Response_Header = self.Cookie = self.Referred_url = self.all_applications = None
+        self.session = self.all_applications = None
         self.HTTP_Responses = {}
         self.total_search_results = self.pages = 0
+
+    def createSession(self):
+        self.session = requests.Session()
+        search_url = r"https://boppa.poole.gov.uk/online-applications/search.do?action=advanced&searchType=Application"
+        response = self.session.get(search_url)
+        return "Started Session..."
 
     # STEP 1
     # Initial Search request
@@ -34,33 +42,26 @@ class ApplicationRequest(object):
         Makes the initial search request with all search criteria
         :return: HTTP response content
         """
-        headers = {
-            "Cookie": "JSESSIONID=cE74K4zHZhXnFKFECrGVFBRotS4HlYEPoOPhM7ml.bopidoxpa; _ga=GA1.3.618276080.1594566479",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36",
-        }
 
         # Create the url to which the get request will be made
-        request = requests.Request("GET", self.URL, params=self.request_params, headers=headers)
+        request = requests.Request("GET", self.URL, params=self.request_params)
         prepared = request.prepare()
-        self.Referred_url = prepared.url
-        print(f"[LOG] GET request to {self.Referred_url}")
+        print(f"[LOG] GET request to {prepared.url}")
 
         # Make the get request
-        response = requests.get(self.URL, params=self.request_params, headers=headers)
-        self.Response_Header = dict(response.headers)
-        self.Cookie = self.Response_Header.get("Set-Cookie")
+        response = self.session.get(self.URL, params=self.request_params)
+
+        # TODO: Check these can be removed from following searches
+        # self.Response_Header = dict(response.headers)
+        # self.Cookie = self.Response_Header.get("Set-Cookie")
 
         # SEND TO RESPONSE CHECK METHOD
         response_valid, response_message = self._checkRequest(response=response)
+
         if response_valid:
             self.HTTP_Responses["page=1"] = response.content
-        else:
-            pass
-        # DEVELOPMENT: Save error html to failed.html
-        with open("failed.html", "w") as error_file:
-            error_file.write(response.content.decode("utf-8"))
-            print("Written Error File")
 
+        print(response_message)
         return response_valid, response_message
 
     @staticmethod
@@ -70,27 +71,48 @@ class ApplicationRequest(object):
         Check the response and all the possibilities to determine if the search was a success or not
 
         STEP 1: Check status code
+        STEP 2: Check page title
+        STEP 3: If back on search page, check for message box
 
         :param response: http response from GET request
-        :return: Boolean and message as to whether the page is valid results or not
+        :return: Boolean and message as to whether the page is valid results or not.
         """
 
-        if response.ok:
-            print(f"[LOG] Good http response {response.status_code}")
-            return True, f"Http response <{response.status_code}>"
+        if not response.ok:
+            print(f"[LOG] Bad http response. Status Code <{response.status_code}>")
+            return False, "Server Error"
+
+        soup = BeautifulSoup(response.content, "html.parser")
+        raw_page_title = soup.find("title")
+
+        if not raw_page_title:
+            # TODO: Fix exceptions
+            raise Exception
         else:
-            print(f"[LOG] Bad http response {response.status_code}")
+            page_title = raw_page_title.text.strip()
 
-            soup = BeautifulSoup(response.content, "html.parser")
+        # print("Page Title: ", page_title)
 
-            page_title = soup.find("title").text.strip()
-            print(page_title)
+        if page_title == "Search Results":
+            return True, "Results Found..."
+        elif page_title == "Applications Search":
+            message = soup.find("div", attrs={"class": "messagebox"})
+            error_message = soup.find("div", attrs={"class": "messagebox errors"})
 
-            # alert = soup.find("div", attrs={"class": "messagebox"})
-            # error = soup.find("div", attrs={"class": "messagebox errors"})
-            # server_error = soup.find("div", attrs={"class": "content"})
+            if message:
+                return False, " ".join(message.text.split("\n"))
+            elif error_message:
+                return False, " ".join(error_message.text.split("\n"))
+            else:
+                # DEVELOPMENT: Save error html to failed.html
+                with open("failed.html", "w") as error_file:
+                    error_file.write(response.content.decode("utf-8"))
 
-            return False, page_title
+                return False, "No Error Message found"
+        else:
+            print("Unexpected page title")
+            # TODO: Fix Exception
+            raise Exception
 
     # STEP 2
     # Gets the number of results and pages from the first page
@@ -119,7 +141,7 @@ class ApplicationRequest(object):
         return self.total_search_results
 
     # Opens an page of index x and reads the content
-    def nextPage(self, page_index=0):
+    def nextPage(self, page_index):
         """
         Gets the HTTPs response for all the following pages of results using the cookie send form the original request
 
@@ -132,18 +154,14 @@ class ApplicationRequest(object):
             print("[ERROR] Invalid page index")
             raise ValueError
 
-        headers = {
-            "Cookie": self.Cookie,
-            "Referer": self.Referred_url
-        }
-
         params = {
             "action": "page",
             "searchCriteria.page": str(page_index)
         }
 
-        response = requests.get(self.URL, params=params, headers=headers)
+        response = self.session.get(self.URL, params=params)
 
+        # LOG for each page that a good http response is received
         if response.ok:
             print(f"[LOG] Good http response {response.status_code}")
         else:
@@ -152,7 +170,7 @@ class ApplicationRequest(object):
         self.HTTP_Responses[f"page={page_index}"] = response.content
         print(f"[LOG] HTTP response for page {page_index} collected")
 
-        return response.content
+        return
 
     # STEP 4
     # Extracts the data by scraping the request data content
@@ -233,26 +251,29 @@ class ApplicationRequest(object):
 def Test():
     request = {
         "action": "firstPage",
-        "org.apache.struts.taglib.html.TOKEN": "ff217d74428fe4d6687e6df9b66fa2eb",
-        "searchCriteria.ward": "KNSN",
         "caseAddressType": "Application",
         "date(applicationValidatedStart)": "10/06/2020",
-        "date(applicationValidatedEnd)": "16/07/2020",
-        "searchType": "Application"
+        "date(applicationValidatedEnd)": "16/0020",
+        "searchType": "Application",
+        "searchCriteria.ward": "giuh34  to8"
     }
 
     ap_request = ApplicationRequest(params=request)
-    response_valid, response_message = ap_request.searchRequest()
+    ap_request.createSession()
+    ap_request.searchRequest()
 
-    if response_valid:
-        print(response_message)
-    # If the http response is not valid: return
-    else:
-        print(response_message)
-        return
+    # response_valid, response_message = ap_request.searchRequest()
+    #
+    # if response_valid:
+    #     print(response_message)
+    # # If the http response is not valid: return
+    # else:
+    #     print(response_message)
+    #     return
 
     # number_applications = ap_request.extractShowingInt()
     # print(f"Search found {number_applications} applications...")
+
     #
     # # STEP 3
     # progress_per_page = int(65 // ap_request.pages - 1)
@@ -262,7 +283,6 @@ def Test():
     #     futures = [executor.submit(ap_request.nextPage, i) for i in range(2, ap_request.pages + 1)]
     #     print("[LOG] Request threads started")
     #     for i, _ in enumerate(concurrent.futures.as_completed(futures)):
-    #         progress += progress_per_page
     #         print(f"Searching page {i + 2}")
     #     # concurrent.futures.wait(futures, return_when="ALL_COMPLETED")
     #     print("[LOG] Request threads finished")
