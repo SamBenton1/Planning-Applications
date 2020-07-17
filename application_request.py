@@ -5,6 +5,7 @@ import itertools
 from PyQt5.QtCore import *
 import time
 import concurrent.futures
+import xlsxwriter
 
 
 # Returns string formatted time
@@ -31,7 +32,7 @@ def LogHTML(response):
 class ApplicationSignals(QObject):
     progress = pyqtSignal(int)
     message = pyqtSignal(str)
-    error = pyqtSignal(bool)
+    error = pyqtSignal()
     reset = pyqtSignal()
     finished = pyqtSignal(object)
 
@@ -82,6 +83,7 @@ class ApplicationRequest(QRunnable):
         else:
             # Response message got from page
             Error(response_message)
+            return
 
         # GET THE NUMBER OF RESULTS ON THE PAGE
         number_results = self.NumberResults()
@@ -95,6 +97,8 @@ class ApplicationRequest(QRunnable):
         self.ExtractData()
 
         # SAVE DATA
+        self.signals.message.emit("Search Completed")
+        self.signals.progress.emit(100)
         self.signals.finished.emit(self.data_set)
 
     # STEP 1
@@ -353,13 +357,23 @@ class ApplicationRequest(QRunnable):
         with open(path[0], "w") as outfile:
             outfile.write(out_put_string)
 
+    # STEP 6
+    # Writes data to xlsx file
+    @staticmethod
+    def WriteXLSX(path, applications):
+        print("Writing XLSX")
+        workbook = xlsxwriter.Workbook(path)
 
-def Test():
-    request = {
-        "action": "firstPage",
-        "searchCriteria.conservationArea": "CA25",
-        "caseAddressType": "Application",
-        "date(applicationValidatedStart)": "27/04/2020",
-        "date(applicationValidatedEnd)": "16/07/2020",
-        "searchType": "Application"
-    }
+        # Add a new worksheet
+        worksheet = workbook.add_worksheet()
+        bold = workbook.add_format({"bold": True})
+
+        # Write headers
+        headers = ["Address", "Title", "Received", "Validated", "Status", "Ref. No", "Url"]
+        worksheet.write_row(0, 0, headers, bold)
+
+        for index, app in enumerate(applications):
+            values = list(app.values())
+            worksheet.write_row(index+1, 0, values)
+
+        workbook.close()

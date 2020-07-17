@@ -305,6 +305,14 @@ class MainWindow(QMainWindow):
         ]
         self.all_input = self.combo_boxes + self.line_edits + self.date_edits
 
+        # MESSAGE BOXES
+        self.file_written = QMessageBox()
+        self.file_written.setMinimumWidth(400)
+        self.file_written.setIcon(QMessageBox.Information)
+        self.file_written.setText("File saved!")
+        self.file_written.setWindowTitle("Information")
+        self.file_written.setStandardButtons(QMessageBox.Ok)
+
     # Reset all values in input boxes
     def Clear(self):
         """
@@ -379,17 +387,7 @@ class MainWindow(QMainWindow):
         self.scroll_area_contents_layout.addWidget(self.progress_bar, 8, 0)
         self.progress_bar_label.setText("Searching...")
 
-        test = {
-            "action": "firstPage",
-            "searchCriteria.conservationArea": "CA25",
-            "caseAddressType": "Application",
-            "date(applicationValidatedStart)": "27/04/2020",
-            "date(applicationValidatedEnd)": "16/07/2020",
-            "searchType": "Application"
-        }
-
-        # DEVELOPMENT: PARAMS ARE TEST
-        app_request = ApplicationRequest(params=test)
+        app_request = ApplicationRequest(params=request)
 
         # THREAD SIGNAL FUNCTIONS
         def update_progress(i):
@@ -410,9 +408,20 @@ class MainWindow(QMainWindow):
             self.scroll_area_contents_layout.removeWidget(self.progress_bar)
 
         def saveFile(applications):
-            path = QFileDialog.getSaveFileName(filter="CSV (*.csv)",
-                                               directory=f"{os.getcwd()}/Output CSV/Untitled.csv")
-            ApplicationRequest.WriteCSV(path, applications)
+            path, extension = QFileDialog.getSaveFileName(filter="Excel Spreadsheet (*.xlsx);;CSV (*.csv)",
+                                               directory=f"{os.getcwd()}/Output CSV/Untitled")
+
+            print(path)
+
+            if extension == "Excel Spreadsheet (*.xlsx)":
+                ApplicationRequest.WriteXLSX(path, applications)
+                self.file_written.exec_()
+            elif extension == "CSV (*.csv)":
+                ApplicationRequest.WriteCSV(path, applications)
+                self.file_written.exec_()
+            else:
+                print("Unrecognised extension")
+
             reset_signal()
 
         app_request.signals.progress.connect(update_progress)
