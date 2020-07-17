@@ -409,6 +409,10 @@ class MainWindow(QMainWindow):
 
     # Reset all values in input boxes
     def Clear(self):
+        """
+        Goes through each of of the input boxes and sets them to null values.
+        :return: None
+        """
         for line_edit in self.line_edits:
             line_edit.setText("")
         for combo_box in self.combo_boxes:
@@ -422,6 +426,7 @@ class MainWindow(QMainWindow):
 
     # Carries out the search function
     def Search(self):
+
         # Fetch codes
         case_type = CASE_TYPE.get(self.application_type.currentText())
         ward = WARD.get(self.ward.currentText())
@@ -483,27 +488,13 @@ class MainWindow(QMainWindow):
 
         # THREAD SIGNAL FUNCTIONS
         def update_progress(i):
-            """
-            Update the progress bar widget
-            :return: None
-            """
             self.progress_bar.setValue(i)
 
         def update_progress_label(msg):
-            """
-            Updates the message in the progress bar label
-            :param msg:
-            :return:
-            """
             self.progress_bar_label.setText(msg)
             self.progress_bar_label.updateGeometry()
 
         def update_progress_label_error(error):
-            """
-            Set the progress label to red if error signal is sent
-            :param error:
-            :return: None
-            """
             if error:
                 self.progress_bar_label.setStyleSheet("color: red;")
 
