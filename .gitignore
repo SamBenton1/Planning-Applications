@@ -8,3 +8,5 @@ build
 *.ipynb
 
 log.txt
+Errors.log
+snippets

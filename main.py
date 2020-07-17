@@ -5,112 +5,10 @@ import sys
 import os
 import json
 from datetime import date
-import application_request
+from application_request import ApplicationRequest
 import time
 import concurrent.futures
 from select_reference import *
-
-# DEVELOPMENT: Issues to test:
-#   - No internet connection
-
-
-# Returns string formatted time
-def clock():
-    return time.strftime('%d/%m/%Y %H:%M:%S', time.localtime())
-
-
-# Writes invalid search to log.txt
-def Log_Error(request):
-    with open("log.txt", "a") as log_file:
-        log_file.write(f"\n [INVALID REQUEST] {clock()} :: {json.dumps(request, indent=2)}")
-
-
-# Signals for the search class
-class SearchSignal(QtCore.QObject):
-    progress = QtCore.pyqtSignal(int)
-    message = QtCore.pyqtSignal(str)
-    error = QtCore.pyqtSignal(bool)
-    reset = QtCore.pyqtSignal()
-    product = QtCore.pyqtSignal(object)
-
-
-# Search as Qt Thread
-class Search(QtCore.QRunnable):
-    def __init__(self, request):
-        super(Search, self).__init__()
-        self.request = request
-        self.signals = SearchSignal()
-
-    @QtCore.pyqtSlot()
-    def run(self):
-        # Create search instance
-        ap_request = application_request.ApplicationRequest(params=self.request)
-
-        session_creation = ap_request.createSession()
-        if session_creation:
-            self.signals.message.emit(session_creation)
-            self.signals.progress.emit(10)
-        else:
-            self.signals.message.emit("No Internet Connection")
-            self.signals.progress.emit(100)
-            self.signals.error.emit(True)
-
-            # WAIT then remove widget
-            time.sleep(3)
-            self.signals.reset.emit()
-            return
-
-        response_valid, response_message = ap_request.searchRequest()
-
-        if response_valid:
-            self.signals.progress.emit(20)
-            self.signals.message.emit(response_message)
-        # If the http response is not valid: return
-        else:
-            self.signals.message.emit(response_message)
-            self.signals.progress.emit(100)
-            self.signals.error.emit(True)
-
-            # WAIT then remove widget
-            time.sleep(3)
-            self.signals.reset.emit()
-            return
-
-        # DEVELOPMENT: Print the first page html
-        # print(ap_request.HTTP_Responses["page=1"].decode("utf-8"))
-
-        number_applications = ap_request.extractShowingInt()
-        self.signals.message.emit(f"Search found {number_applications} applications...")
-        self.signals.progress.emit(25)
-
-        # STEP 3
-        # Uses thread pool to open all pages and extract the html content
-        # From original app request class def openPages(self):
-        #
-        # Uses thread pool to get all the pages of results at once. Takes progress from 25 to 90 (65)
-
-        progress_per_page = int(65//ap_request.pages-1)
-        progress = 25
-
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            futures = [executor.submit(ap_request.nextPage, i) for i in range(2, ap_request.pages + 1)]
-            print("[LOG] Request threads started")
-            for i, _ in enumerate(concurrent.futures.as_completed(futures)):
-                progress += progress_per_page
-                self.signals.message.emit(f"Searching page {i+2}")
-                self.signals.progress.emit(progress)
-            # concurrent.futures.wait(futures, return_when="ALL_COMPLETED")
-            print("[LOG] Request threads finished")
-
-        # By the end must always be 90% done
-        self.signals.progress.emit(90)
-
-        # EXTRACT DATA
-        ap_request.ExtractData()
-        self.signals.message.emit("Search Completed")
-        self.signals.progress.emit(100)
-
-        self.signals.product.emit(ap_request.all_applications)
 
 
 # Reimplemented date edit widget to allow for null values
@@ -427,7 +325,7 @@ class MainWindow(QMainWindow):
     # Carries out the search function
     def Search(self):
 
-        # Fetch codes
+        # FETCH CODES
         case_type = CASE_TYPE.get(self.application_type.currentText())
         ward = WARD.get(self.ward.currentText())
         conservation_area = CONSERVATION_AREA.get(self.conservation_area.currentText())
@@ -474,17 +372,24 @@ class MainWindow(QMainWindow):
             if value not in ignore:
                 request[key] = value
 
-        # TODO: Log searches to log file
-        print(json.dumps(request, indent=2))
+        # print(json.dumps(request, indent=2))
 
-        # Add progress bar to layout
+        # Initialise search bar and label.
         self.scroll_area_contents_layout.addWidget(self.progress_bar_label, 7, 0)
         self.scroll_area_contents_layout.addWidget(self.progress_bar, 8, 0)
         self.progress_bar_label.setText("Searching...")
-        self.progress_bar.setValue(5)
 
-        # SEARCH THREAD
-        search_thread = Search(request)
+        test = {
+            "action": "firstPage",
+            "searchCriteria.conservationArea": "CA25",
+            "caseAddressType": "Application",
+            "date(applicationValidatedStart)": "27/04/2020",
+            "date(applicationValidatedEnd)": "16/07/2020",
+            "searchType": "Application"
+        }
+
+        # DEVELOPMENT: PARAMS ARE TEST
+        app_request = ApplicationRequest(params=test)
 
         # THREAD SIGNAL FUNCTIONS
         def update_progress(i):
@@ -494,9 +399,8 @@ class MainWindow(QMainWindow):
             self.progress_bar_label.setText(msg)
             self.progress_bar_label.updateGeometry()
 
-        def update_progress_label_error(error):
-            if error:
-                self.progress_bar_label.setStyleSheet("color: red;")
+        def update_progress_label_error():
+            self.progress_bar_label.setStyleSheet("color: red;")
 
         def reset_signal():
             self.progress_bar_label.setStyleSheet("color: black;")
@@ -505,21 +409,19 @@ class MainWindow(QMainWindow):
             self.scroll_area_contents_layout.removeWidget(self.progress_bar_label)
             self.scroll_area_contents_layout.removeWidget(self.progress_bar)
 
-        def saveFile(all_applications):
+        def saveFile(applications):
             path = QFileDialog.getSaveFileName(filter="CSV (*.csv)",
-                                               directory=f"{os.getcwd()}/Output CSV/search results")
-            application_request.ApplicationRequest.WriteCSV(path, all_applications)
+                                               directory=f"{os.getcwd()}/Output CSV/Untitled.csv")
+            ApplicationRequest.WriteCSV(path, applications)
             reset_signal()
 
-        # CONNECT SIGNAL FUNCTIONS
-        search_thread.signals.progress.connect(update_progress)
-        search_thread.signals.message.connect(update_progress_label)
-        search_thread.signals.error.connect(update_progress_label_error)
-        search_thread.signals.reset.connect(reset_signal)
-        search_thread.signals.product.connect(saveFile)
+        app_request.signals.progress.connect(update_progress)
+        app_request.signals.message.connect(update_progress_label)
+        app_request.signals.error.connect(update_progress_label_error)
+        app_request.signals.finished.connect(saveFile)
 
         # START THREAD
-        self.thread_pool.start(search_thread)
+        self.thread_pool.start(app_request)
 
 
 app = QApplication(sys.argv)

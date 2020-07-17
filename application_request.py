@@ -1,55 +1,127 @@
+import json
 import requests
 from bs4 import BeautifulSoup
 import itertools
+from PyQt5.QtCore import *
+import time
+import concurrent.futures
 
 
-# FIXME: This Search
-#     {
-#       "action": "firstPage",
-#       "searchCriteria.conservationArea": "CA14",
-#       "caseAddressType": "Application",
-#       "date(applicationValidatedStart)": "15/05/2020",
-#       "date(applicationValidatedEnd)": "16/07/2020",
-#       "searchType": "Application"
-#     }
+# Returns string formatted time
+def clock():
+    return time.strftime('%d/%m/%Y %H:%M:%S', time.localtime())
 
-class ApplicationRequest(object):
-    simple_search = r"https://boppa.poole.gov.uk/online-applications/simpleSearchResults.do"
-    advance_search = r"https://boppa.poole.gov.uk/online-applications/advancedSearchResults.do"
 
-    # DEVELOPMENT: send request to http bin:
-    #   advance_search = r"http://httpbin.org/get"
+# Log Errors
+def Log(error_message, request=""):
+    print(f"[LOGGING] {error_message}")
+    request_string = "REQUEST = " + request if request else ""
+    with open("Errors.log", "a") as error_logs:
+        error_logs.write(f"[LOG] {clock()} :: {error_message} {request_string}\n")
 
-    def __init__(self, params, search_type="advanced"):
 
-        # TYPE OF SEARCH
-        if search_type == "advanced":
-            self.URL = self.advance_search
-        else:
-            self.URL = self.simple_search
+def LogHTML(response):
+    # DEVELOPMENT: Save error html to failed.html
+    with open("failed.html", "w") as error_file:
+        print("writing error html")
+        error_file.write(response.content.decode("utf-8"))
+
+
+# Contains all the signals send from the back end class to the front end GUI.
+class ApplicationSignals(QObject):
+    progress = pyqtSignal(int)
+    message = pyqtSignal(str)
+    error = pyqtSignal(bool)
+    reset = pyqtSignal()
+    finished = pyqtSignal(object)
+
+
+class ApplicationRequest(QRunnable):
+    # r"http://httpbin.org/get"
+    URL = "https://boppa.poole.gov.uk/online-applications/advancedSearchResults.do"
+
+    # DECLARE ATTRIBUTES
+    session = all_applications = None
+    HTTP_Responses = {}
+    total_search_results = pages = 0
+    data_set = None
+
+    def __init__(self, params):
+        super(ApplicationRequest, self).__init__()
 
         # SEARCH PARAMETERS
         self.request_params = params
+        self.signals = ApplicationSignals()
 
-        # DECLARE ATTRIBUTES
-        self.session = self.all_applications = None
-        self.HTTP_Responses = {}
-        self.total_search_results = self.pages = 0
+    # CLASS THREAD
+    def run(self):
+        wait = time.sleep
 
-    def createSession(self):
-        self.session = requests.Session()
-        search_url = r"https://boppa.poole.gov.uk/online-applications/search.do?action=advanced&searchType=Application"
-        try:
-            response = self.session.get(search_url)
-        except requests.exceptions.ConnectionError:
-            print("No Internet Connection")
-            return None
+        # BASIC ERROR
+        def Error(msg):
+            self.signals.progress.emit(100)
+            self.signals.error.emit()
+            self.signals.message.emit(msg)
 
-        return "Started Session..."
+            wait(3)
+            self.signals.reset.emit()
+
+        # START SESSION
+        if self.StartSession():
+            self.signals.progress.emit(5)
+            self.signals.message.emit("Session started...")
+        else:
+            "Failed to start session... [SEE LOG]"
+            return
+
+        # START SEARCH
+        response_ok, response_message = self.SearchRequest()
+        if response_ok:
+            self.signals.progress.emit(10)
+            self.signals.message.emit("Search found results...")
+        else:
+            # Response message got from page
+            Error(response_message)
+
+        # GET THE NUMBER OF RESULTS ON THE PAGE
+        number_results = self.NumberResults()
+        self.signals.progress.emit(15)
+        self.signals.message.emit(f"Found {number_results} results over {self.pages} pages...")
+
+        # OPEN ALL SUBSEQUENT PAGES
+        self.OpenPages()
+
+        # EXTRACT DATA FROM HTTP RESPONSES
+        self.ExtractData()
+
+        # SAVE DATA
+        self.signals.finished.emit(self.data_set)
 
     # STEP 1
+    def StartSession(self):
+        """
+        Starts session with poole.gov.uk website to obtain cookie for the search.
+        :return: Boolean value of if session starting was successful
+        """
+        self.session = requests.Session()
+        main_url = r"https://boppa.poole.gov.uk/online-applications/search.do?action=advanced&searchType=Application"
+
+        try:
+            response = self.session.get(main_url)
+        except requests.exceptions.ConnectionError:
+            Log("No Internet Connection")
+            return False
+
+        if not response.ok:
+            Log(f"Bad Http response when starting session, status code <{response.status_code}>")
+            return False
+
+        print("[LOG] Started Session")
+        return True
+
+    # STEP 2
     # Initial Search request
-    def searchRequest(self):
+    def SearchRequest(self):
         """
         Makes the initial search request with all search criteria
         :return: HTTP response content
@@ -64,46 +136,47 @@ class ApplicationRequest(object):
         response = self.session.get(self.URL, params=self.request_params)
 
         # SEND TO RESPONSE CHECK METHOD
-        response_valid, response_message = self._checkRequest(response=response)
+        response_valid, response_message = self._CheckRequest(response=response)
 
         if response_valid:
             self.HTTP_Responses["page=1"] = response.content
 
-        print(response_message)
         return response_valid, response_message
 
-    @staticmethod
-    # Private - Checks the first page to make sure that it is showing search results
-    def _checkRequest(response):
+    # PRIVATE - Checks the first page to make sure that it is showing search results
+    def _CheckRequest(self, response):
         """
         Check the response and all the possibilities to determine if the search was a success or not
 
-        STEP 1: Check status code
-        STEP 2: Check page title
-        STEP 3: If back on search page, check for message box
+        STEP I: Check status code
+        STEP II: Check page title
+        STEP III: If back on search page, check for message box
+        TODO STEP IV: Check if the page is a response page
 
         :param response: http response from GET request
         :return: Boolean and message as to whether the page is valid results or not.
         """
 
+        # STEP I:
         if not response.ok:
             print(f"[LOG] Bad http response. Status Code <{response.status_code}>")
             return False, "Server Error"
 
+        # STEP II:
         soup = BeautifulSoup(response.content, "html.parser")
         raw_page_title = soup.find("title")
 
         if not raw_page_title:
-            # TODO: Fix exceptions
-            raise Exception
+            Log(f"Web page title not found.", request=self.request_params)
+            return False, "Page title not found"
         else:
             page_title = raw_page_title.text.strip()
-
-        # print("Page Title: ", page_title)
 
         if page_title == "Search Results":
             return True, "Results Found..."
         elif page_title == "Applications Search":
+
+            # STEP III
             message = soup.find("div", attrs={"class": "messagebox"})
             error_message = soup.find("div", attrs={"class": "messagebox errors"})
 
@@ -112,23 +185,17 @@ class ApplicationRequest(object):
             elif error_message:
                 return False, " ".join(error_message.text.split("\n"))
             else:
-                # DEVELOPMENT: Save error html to failed.html
-                with open("failed.html", "w") as error_file:
-                    print("writing error html")
-                    error_file.write(response.content.decode("utf-8"))
-
                 return False, "No Error Message found"
         else:
-            print("Unexpected page title")
-            # TODO: Fix Exception
-            raise Exception
+            Log("Unexpected page title", request=self.request_params)
+            return False, "Unexpected page title"
 
-    # STEP 2
+    # STEP 3
     # Gets the number of results and pages from the first page
-    def extractShowingInt(self):
+    def NumberResults(self):
         """
         Uses html parser to pick out number of items showing and calculate the number of pages for viewing.
-        :return: Number of pages
+        :return: Int Number of results
         """
 
         # Check the Http response is present
@@ -140,10 +207,16 @@ class ApplicationRequest(object):
         soup = BeautifulSoup(page_one_html, "html.parser")
         showing_element = soup.find("span", attrs={"class": "showing"})
 
+        # Less than a full page of results
         if not showing_element:
-            # FIXME: If less that 10 results cannot gather the number of results
-            return 0
+            # Locate search results
+            search_results = soup.find("ul", id="searchresults")
+            self.pages = 1
+            self.total_search_results = len(search_results.find_all("li"))
+            print(f"[LOG] {self.total_search_results} applications found over {self.pages} pages")
+            return self.total_search_results
 
+        # If there is more than one page of results look at the showing div
         raw_total_applications = showing_element.text
         raw_showing, total_applications = raw_total_applications.split(" of ")
         showing = int(raw_showing[-2:])
@@ -153,13 +226,35 @@ class ApplicationRequest(object):
 
         return self.total_search_results
 
-    # Opens an page of index x and reads the content
-    def nextPage(self, page_index):
+    # STEP 4
+    # Opens all the rest of the pages.
+    def OpenPages(self):
+        """
+        Uses concurrent.futures ThreadPoolExecutor to open all the pages quickly and extract the html from them.
+        :return: None
+        """
+        progress_per_page = int(75 // self.pages - 1)
+        progress = 15
+
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            futures = [executor.submit(self._NextPage, i) for i in range(2, self.pages + 1)]
+
+            for i, _ in enumerate(concurrent.futures.as_completed(futures)):
+                progress += progress_per_page
+                self.signals.message.emit(f"Searching page {i + 2}...")
+                self.signals.progress.emit(progress)
+
+        # By the end must always be 90% done
+        self.signals.progress.emit(90)
+        print("[LOG] Opened all pages")
+
+    # PRIVATE - Opens an page of index x and reads the content
+    def _NextPage(self, page_index):
         """
         Gets the HTTPs response for all the following pages of results using the cookie send form the original request
 
         :param page_index: the index of the page being requested
-        :return: the HTTP response content for that page index
+        :return: None
         """
 
         # Raise value error if the entered page index is out of range
@@ -178,14 +273,12 @@ class ApplicationRequest(object):
         if response.ok:
             print(f"[LOG] Good http response {response.status_code}")
         else:
-            print(f"[LOG] Bad http response {response.status_code}")
+            Log(f"Bad http response {response.status_code}")
 
         self.HTTP_Responses[f"page={page_index}"] = response.content
         print(f"[LOG] HTTP response for page {page_index} collected")
 
-        return
-
-    # STEP 4
+    # STEP 5
     # Extracts the data by scraping the request data content
     def ExtractData(self):
         """
@@ -193,7 +286,7 @@ class ApplicationRequest(object):
 
         :return: Json data set for all pages
         """
-        data_set = {}
+        self.data_set = []
 
         for response in self.HTTP_Responses:
             soup = BeautifulSoup(self.HTTP_Responses[response], "html.parser")
@@ -206,18 +299,18 @@ class ApplicationRequest(object):
                 # Extract url and title
                 application_link = li.a.attrs["href"]
                 application_title = li.a.text.strip().strip("\r\n").strip()
-                application_title = f'"{application_title}"'
+                # application_title = f'"{application_title}"'
 
                 # Get the meta data
                 address_element, meta_element = li.find_all("p")
                 address = address_element.text.strip()
-                address = f'"{address}"'
+                # address = f'"{address}"'
                 meta = meta_element.text.strip()
                 data = " ".join(meta.split())
                 values = [value for value in data.split(" | ")]
                 ref_no, received, validated, status = values
 
-                # construct data dict
+                # CONSTRUCT dict for application data
                 application_data = {
                     "Address": address,
                     "Title": application_title,
@@ -231,30 +324,32 @@ class ApplicationRequest(object):
                 page_applications.append(application_data)
 
             print(f"[LOG] Got data from {response}")
-            data_set[response] = page_applications
-
-            # Join applications from all pages to one list
-            self.all_applications = list(itertools.chain.from_iterable(list(data_set.values())))
+            self.data_set.extend(page_applications)
 
         # DEVELOPMENT: Printing of all search results
-        # print(json.dumps(data_set, indent=2))
+        print(json.dumps(self.data_set, indent=2))
 
-        return data_set
+        return self.data_set
 
-    # STEP 5
+    # STEP 6
     # Writes data to a csv file
     @staticmethod
     def WriteCSV(path, applications):
         """
-
+        Edit the data and write to CSV file.
         :param applications:
-        :param path:
-        :return:
+        :param path: Got from QFileDialog
+        :return: None
         """
         out_put_string = "Address, Title, Received, Validated, Status, Ref. No, Url,\n"
+
+        # Clean data and join onto string
         for application_dict in applications:
-            csv_line = ",".join(list(application_dict.values())) + "\n"
+            csv_config_data = [f'"{value}"' if "," in value else value for value in list(application_dict.values())]
+            csv_line = ",".join(csv_config_data) + "\n"
             out_put_string += csv_line
+
+        # Write multiline string to csv file
         with open(path[0], "w") as outfile:
             outfile.write(out_put_string)
 
@@ -262,48 +357,9 @@ class ApplicationRequest(object):
 def Test():
     request = {
         "action": "firstPage",
-        # "org.apache.struts.taglib.html.TOKEN": "ff217d74428fe4d6687e6df9b66fa2eb",
         "searchCriteria.conservationArea": "CA25",
         "caseAddressType": "Application",
         "date(applicationValidatedStart)": "27/04/2020",
         "date(applicationValidatedEnd)": "16/07/2020",
         "searchType": "Application"
     }
-
-    ap_request = ApplicationRequest(params=request)
-    ap_request.createSession()
-    ap_request.searchRequest()
-
-    # response_valid, response_message = ap_request.searchRequest()
-    #
-    # if response_valid:
-    #     print(response_message)
-    # # If the http response is not valid: return
-    # else:
-    #     print(response_message)
-    #     return
-
-    # number_applications = ap_request.extractShowingInt()
-    # print(f"Search found {number_applications} applications...")
-
-    #
-    # # STEP 3
-    # progress_per_page = int(65 // ap_request.pages - 1)
-    # progress = 25
-    #
-    # with concurrent.futures.ThreadPoolExecutor() as executor:
-    #     futures = [executor.submit(ap_request.nextPage, i) for i in range(2, ap_request.pages + 1)]
-    #     print("[LOG] Request threads started")
-    #     for i, _ in enumerate(concurrent.futures.as_completed(futures)):
-    #         print(f"Searching page {i + 2}")
-    #     # concurrent.futures.wait(futures, return_when="ALL_COMPLETED")
-    #     print("[LOG] Request threads finished")
-    #
-    # # EXTRACT DATA
-    # ap_request.ExtractData()
-    # print("Data extracted...")
-    # print(ap_request.all_applications)
-
-
-if __name__ == '__main__':
-    Test()
