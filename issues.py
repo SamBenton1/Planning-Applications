@@ -14,8 +14,8 @@ def clock():
 # Log Errors
 def Log(error_message, request=""):
     print(f"[LOGGING] {error_message}")
-    request_string = "REQUEST = " + request if request else ""
-    with open("Errors.log", "a") as error_logs:
+    request_string = f"REQUEST = {request}" if request else ""
+    with open("errors.log", "a") as error_logs:
         error_logs.write(f"[LOG] {clock()} :: {error_message} {request_string}\n")
 
 
@@ -26,6 +26,7 @@ def LogHTML(response):
 
 
 def LogIssue(title, request):
+    return
     git = Github(TOKEN)
     repo = git.get_repo("SamBenton1/Planning-Applications")
 

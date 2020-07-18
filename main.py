@@ -3,12 +3,10 @@ from PyQt5.QtGui import QIcon
 from PyQt5 import QtCore
 import sys
 import os
-import json
 from datetime import date
 from application_request import ApplicationRequest
-import time
-import concurrent.futures
 from select_reference import *
+from issues import Log
 
 
 # Reimplemented date edit widget to allow for null values
@@ -307,11 +305,13 @@ class MainWindow(QMainWindow):
 
         # MESSAGE BOXES
         self.file_written = QMessageBox()
-        self.file_written.setMinimumWidth(400)
+        self.file_written.setWindowIcon(QIcon(r"resources\icon.png"))
+        self.file_written.setStyleSheet("QLabel{min-width:150 px}")
         self.file_written.setIcon(QMessageBox.Information)
         self.file_written.setText("File saved!")
         self.file_written.setWindowTitle("Information")
         self.file_written.setStandardButtons(QMessageBox.Ok)
+
 
     # Reset all values in input boxes
     def Clear(self):
@@ -417,13 +417,14 @@ class MainWindow(QMainWindow):
                 ApplicationRequest.WriteCSV(path, applications)
                 self.file_written.exec_()
             else:
-                print("Unrecognised extension")
+                Log("Unrecognised or no file extension")
 
             reset_signal()
 
         app_request.signals.progress.connect(update_progress)
         app_request.signals.message.connect(update_progress_label)
         app_request.signals.error.connect(update_progress_label_error)
+        app_request.signals.reset.connect(reset_signal)
         app_request.signals.finished.connect(saveFile)
 
         # START THREAD

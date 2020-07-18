@@ -1,12 +1,12 @@
 venv
 .idea
 __pycache__
-Output CSV
+Spreadsheets
 build
 
 *.html
 *.ipynb
 
 log.txt
-Errors.log
+errors.log
 snippets

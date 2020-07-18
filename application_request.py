@@ -1,12 +1,11 @@
 import json
 import requests
 from bs4 import BeautifulSoup
-import itertools
 from PyQt5.QtCore import *
 import time
 import concurrent.futures
 import xlsxwriter
-from issues import Log
+from issues import Log, LogIssue, LogHTML
 
 
 # Returns string formatted time
@@ -66,6 +65,13 @@ class ApplicationRequest(QRunnable):
         if response_ok:
             self.signals.progress.emit(10)
             self.signals.message.emit("Search found results...")
+
+            # If there is only one result then read that page.
+            if response_message == "single":
+                self.signals.message.emit("Search Completed")
+                self.signals.progress.emit(100)
+                self.signals.finished.emit(self.data_set)
+                return
         else:
             # Response message got from page
             Error(response_message)
@@ -130,6 +136,8 @@ class ApplicationRequest(QRunnable):
 
         if response_valid:
             self.HTTP_Responses["page=1"] = response.content
+        else:
+            LogHTML(response)
 
         return response_valid, response_message
 
@@ -158,12 +166,13 @@ class ApplicationRequest(QRunnable):
 
         if not raw_page_title:
             Log(f"Web page title not found.", request=self.request_params)
+            LogIssue("Title element not found", request=self.request_params)
             return False, "Page title not found"
         else:
             page_title = raw_page_title.text.strip()
 
         if page_title == "Search Results":
-            return True, "Results Found..."
+            return True, "page"
         elif page_title == "Applications Search":
 
             # STEP III
@@ -177,8 +186,12 @@ class ApplicationRequest(QRunnable):
             else:
                 return False, "No Error Message found"
         else:
-            Log("Unexpected page title", request=self.request_params)
-            return False, "Unexpected page title"
+            if self._SinglePageDataExtraction(soup=soup, response=response):
+                return True, "single"
+            else:
+                Log("Unexpected page title", request=self.request_params)
+                LogIssue("Unexpected page title", request=self.request_params)
+                return False, "Unexpected page title"
 
     # STEP 3
     # Gets the number of results and pages from the first page
@@ -215,6 +228,45 @@ class ApplicationRequest(QRunnable):
         print(f"[LOG] {self.total_search_results} applications found over {self.pages} pages")
 
         return self.total_search_results
+
+    # STEP 3 (ALTERNATIVE)
+    def _SinglePageDataExtraction(self, soup, response):
+        """
+        Uses data scraping to get data from the single page
+        :param soup: BeautifulSoup object
+        :param response: the Requests response object
+        :return: Boolean of whether the data has been extracted from a single page
+        """
+
+        heading = soup.find("div", id="pageheading")
+        if heading:
+            if heading.h1.text == "Planning – Application Summary":
+                table = soup.find("table", id="simpleDetailsTable")
+
+                rows = table.find_all("tr")
+                table_values = {}
+                for row in [row.findChild() for row in rows]:
+                    key = row.text.strip()
+                    value = row.find_next_sibling().text.strip()
+                    table_values[key] = value
+
+                self.data_set = [
+                    {
+                        "Address": table_values.get("Address"),
+                        "Title": table_values.get("Proposal"),
+                        "Received": table_values.get("Application Received"),
+                        "Validated": table_values.get("Application Validated"),
+                        "Status": table_values.get("Status"),
+                        "Ref. No:": table_values.get("Reference"),
+                        "Url": response.url
+                    }
+                ]
+                if any(self.data_set) is None:
+                    Log("Single page, didn't find table row", request=self.data_set)
+
+                return True
+
+        return False
 
     # STEP 4
     # Opens all the rest of the pages.
@@ -301,7 +353,6 @@ class ApplicationRequest(QRunnable):
                 ref_no, received, validated, status = values
 
                 # CONSTRUCT dict for application data
-                # TODO: MAKE URL FULL URL NOT RELATIVE
                 application_data = {
                     "Address": address,
                     "Title": application_title,
@@ -309,16 +360,13 @@ class ApplicationRequest(QRunnable):
                     "Validated": validated.lstrip("Validated: "),
                     "Status": status.lstrip("Status: "),
                     "Ref. No:": ref_no.lstrip("Ref. No: "),
-                    "Url": application_link,
+                    "Url": "https://boppa.poole.gov.uk" + application_link,
                 }
 
                 page_applications.append(application_data)
 
             print(f"[LOG] Got data from {response}")
             self.data_set.extend(page_applications)
-
-        # DEVELOPMENT: Printing of all search results
-        print(json.dumps(self.data_set, indent=2))
 
         return self.data_set
 
