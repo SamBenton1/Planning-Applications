@@ -6,26 +6,12 @@ from PyQt5.QtCore import *
 import time
 import concurrent.futures
 import xlsxwriter
+from issues import Log
 
 
 # Returns string formatted time
 def clock():
     return time.strftime('%d/%m/%Y %H:%M:%S', time.localtime())
-
-
-# Log Errors
-def Log(error_message, request=""):
-    print(f"[LOGGING] {error_message}")
-    request_string = "REQUEST = " + request if request else ""
-    with open("Errors.log", "a") as error_logs:
-        error_logs.write(f"[LOG] {clock()} :: {error_message} {request_string}\n")
-
-
-def LogHTML(response):
-    # DEVELOPMENT: Save error html to failed.html
-    with open("failed.html", "w") as error_file:
-        print("writing error html")
-        error_file.write(response.content.decode("utf-8"))
 
 
 # Contains all the signals send from the back end class to the front end GUI.
@@ -315,6 +301,7 @@ class ApplicationRequest(QRunnable):
                 ref_no, received, validated, status = values
 
                 # CONSTRUCT dict for application data
+                # TODO: MAKE URL FULL URL NOT RELATIVE
                 application_data = {
                     "Address": address,
                     "Title": application_title,
@@ -374,6 +361,6 @@ class ApplicationRequest(QRunnable):
 
         for index, app in enumerate(applications):
             values = list(app.values())
-            worksheet.write_row(index+1, 0, values)
+            worksheet.write_row(index + 1, 0, values)
 
         workbook.close()

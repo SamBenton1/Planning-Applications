@@ -345,7 +345,6 @@ class MainWindow(QMainWindow):
         # Create request
         raw_request = {
             "action": "firstPage",
-            # "org.apache.struts.taglib.html.TOKEN": "ff217d74428fe4d6687e6df9b66fa2eb",
             "searchCriteria.reference": self.application_reference.text(),
             "searchCriteria.planningPortalReference": self.planning_portal_reference.text(),
             "searchCriteria.alternativeReference": self.alternative_reference.text(),
@@ -380,8 +379,6 @@ class MainWindow(QMainWindow):
             if value not in ignore:
                 request[key] = value
 
-        # print(json.dumps(request, indent=2))
-
         # Initialise search bar and label.
         self.scroll_area_contents_layout.addWidget(self.progress_bar_label, 7, 0)
         self.scroll_area_contents_layout.addWidget(self.progress_bar, 8, 0)
@@ -409,7 +406,7 @@ class MainWindow(QMainWindow):
 
         def saveFile(applications):
             path, extension = QFileDialog.getSaveFileName(filter="Excel Spreadsheet (*.xlsx);;CSV (*.csv)",
-                                               directory=f"{os.getcwd()}/Output CSV/Untitled")
+                                                          directory=f"{os.getcwd()}/Output CSV/Untitled")
 
             print(path)
 
