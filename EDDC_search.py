@@ -9,7 +9,7 @@ from datetime import date
 
 
 # FIXME: MAKE QRUNNABLE
-class EDDCSearch():
+class EDDCSearch(QRunnable):
     session = None
     pages = None
     view_state = {}
@@ -17,7 +17,7 @@ class EDDCSearch():
     data_set = []
 
     def __init__(self, request_data):
-        # super(EDDCSearch, self).__init__()
+        super(EDDCSearch, self).__init__()
         self.signals = SearchSignals()
         self.request = request_data
 
@@ -92,6 +92,9 @@ class EDDCSearch():
         search_url = "https://eastplanning.dorsetcouncil.gov.uk/advsearch.aspx"
         search_page = self.session.get(search_url)
 
+        # with open("html_responses/AdvancedSearch.html", "w") as outfile:
+        #     outfile.write(search_page.content.decode("utf-8"))
+
         # Starts with just the search button
         prepared_request = {}
 
@@ -107,6 +110,8 @@ class EDDCSearch():
         for key, value in self.request.items():
             if not value:
                 continue
+            if value == " ":
+                continue
 
             if "Date" in key:
                 prepared_request.update(self._GenerateHiddenFields(key, value))
@@ -114,15 +119,12 @@ class EDDCSearch():
                 prepared_request.update({key: value})
 
         pprint(prepared_request)
-        pprint(dict(self.session.cookies))
+        # pprint(dict(self.session.cookies))
 
         search_response = self.session.post(url="https://eastplanning.dorsetcouncil.gov.uk/advsearch.aspx",
                                             data=prepared_request)
 
         self.HTTP_Responses["page=0"] = search_response.content
-
-        # with open("html_responses/page=0.html", "w") as outfile:
-        #     outfile.write(search_response.content.decode("utf-8"))
 
         print("Search Response: ", search_response)
         print("History: ", search_response.history)
@@ -137,35 +139,35 @@ class EDDCSearch():
         TODO Clean me up
         """
 
-        # Keys
-        dateInputKey = field + "$dateInput"
-        dateInput_ClientKey = dateInputKey.replace("$", "_") + "_ClientState"
-        calendar_SD_Key = field.replace("$", "_") + "_calendar_SD"
-        calendar_AD_Key = field.replace("$", "_") + "_calendar_AD"
-        Client_state_Key = field.replace("$", "_") + "_ClientState"
+        text_key = field.rstrip("$dateInput")
+        date_input_key = field
+        date_input_client_key = field.replace("$", "_") + "_ClientState"
+        calendar_SD_Key = text_key.replace("$", "_") + "_calendar_SD"
+        calendar_AD_Key = text_key.replace("$", "_") + "_calendar_AD"
+        Client_state_Key = text_key.replace("$", "_") + "_ClientState"
 
         # Values dependent on if there is a value input or not
         if value:
-            split_date = value.split("-")
-            dateInputValue = "/".join(reversed(split_date))
+            split_date = value.split("/")
+            text_value = "-".join(reversed(split_date))
             extended_date = f"{value}-00-00-00"
             calendar_SD_Value = str([list(map(int, split_date))])
         else:
-            dateInputValue = ""
+            text_value = ""
             extended_date = ""
             calendar_SD_Value = "[]"
 
         dateInput_ClientValue = '{"enabled":true,"emptyMessage":"","validationText":"' + extended_date \
                                 + '","valueAsString":"' + extended_date + \
-                                '","minDateStr":"1980-01-01-00-00-00","maxDateStr":"2099-12-31-00-00-00","lastSetTextBoxValue":"' + dateInputValue + '"}'
+                                '","minDateStr":"1980-01-01-00-00-00","maxDateStr":"2099-12-31-00-00-00","lastSetTextBoxValue":"' + value + '"}'
 
         calendar_AD_Value = f'[[1980,1,1],[2099,12,30],[{",".join(map(str, map(int, str(date.today()).split("-"))))}]]'
 
         # COMPILE INTO DICT
         output = {
-            field: value,
-            dateInputKey: dateInputValue,
-            dateInput_ClientKey: dateInput_ClientValue,
+            text_key: text_value,
+            date_input_key: value,
+            date_input_client_key: dateInput_ClientValue,
             calendar_SD_Key: calendar_SD_Value,
             calendar_AD_Key: calendar_AD_Value,
             Client_state_Key: ""
