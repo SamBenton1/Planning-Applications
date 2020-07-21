@@ -5,9 +5,11 @@ from QtReimplementations import DateEdit
 from select_reference import *
 import EDDC_search
 
+
 # noinspection PyArgumentList
 class EDDC_Widget(QMainWindow):
     stylesheet = open("resources/EDDC.css").read()
+    continue_search = QtCore.pyqtSignal(bool)
 
     def __init__(self, *args, **kwargs):
         super(EDDC_Widget, self).__init__(*args, **kwargs)
@@ -233,17 +235,32 @@ class EDDC_Widget(QMainWindow):
             "ctl00$ContentPlaceHolder1$ddlParish": parish,
             "ctl00$ContentPlaceHolder1$ddlWard": ward,
             "ctl00$ContentPlaceHolder1$ddlDecisionType": decision_type,
-            "ctl00$ContentPlaceHolder1$txtDateReceivedFrom$dateInput": self.received_valid_between_start.text(),
-            "ctl00$ContentPlaceHolder1$txtDateReceivedTo$dateInput": self.received_valid_between_end.text(),
-            "ctl00$ContentPlaceHolder1$txtDateIssuedFrom$dateInput": self.issued_between_start.text(),
-            "ctl00$ContentPlaceHolder1$txtDateIssuedTo$dateInput": self.issued_between_end.text(),
+            "ctl00$ContentPlaceHolder1$txtDateReceivedFrom": self.received_valid_between_start.text(),
+            "ctl00$ContentPlaceHolder1$txtDateReceivedTo": self.received_valid_between_end.text(),
+            "ctl00$ContentPlaceHolder1$txtDateIssuedFrom": self.issued_between_start.text(),
+            "ctl00$ContentPlaceHolder1$txtDateIssuedTo": self.issued_between_end.text(),
             "ctl00$ContentPlaceHolder1$ddlApplicationType": application_type,
             "ctl00$ContentPlaceHolder1$ddlAppealMethod": appeal_method,
             "ctl00$ContentPlaceHolder1$ddlAppealDecision": appeal_decision,
             "ctl00_ContentPlaceHolder1_txtPinsRef": self.inspectorate_reference.text(),
-            "ctl00$ContentPlaceHolder1$txtDateAppealDecisionFrom$dateInput": self.appeal_decision_between_start.text(),
-            "ctl00$ContentPlaceHolder1$txtDateAppealDecisionTo$dateInput": self.appeal_decision_between_end.text()
+            "ctl00$ContentPlaceHolder1$txtDateAppealDecisionFrom": self.appeal_decision_between_start.text(),
+            "ctl00$ContentPlaceHolder1$txtDateAppealDecisionTo": self.appeal_decision_between_end.text()
         }
 
         SearchRequest = EDDC_search.EDDCSearch(request_data=build_request)
+
+        def TooManyResults(number):
+            self.too_many = QMessageBox()
+            self.too_many.setIcon(QMessageBox.Warning)
+            self.too_many.setText(f"Over {number} pages of results found.\nAre you sure you want to continue?\n(It may take a while)")
+            self.too_many.setStandardButtons(QMessageBox.Yes|QMessageBox.Cancel)
+            self.too_many.setWindowTitle("Warning")
+            if self.too_many.exec_() == 16384:
+                self.continue_search.emit(True)
+                print("emit True")
+            else:
+                self.continue_search.emit(False)
+
+        SearchRequest.signals.too_many_results.connect(TooManyResults)
+
         self.thread_pool.start(SearchRequest)

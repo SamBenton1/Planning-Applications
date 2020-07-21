@@ -7,7 +7,6 @@ from signals import SearchSignals
 import time
 from datetime import date
 
-
 # FIXME: MAKE QRUNNABLE
 class EDDCSearch(QRunnable):
     session = None
@@ -28,7 +27,24 @@ class EDDCSearch(QRunnable):
         """
         self.StartSession()
         self.SearchRequest()
-        self.NumberPages()
+        if self.NumberPages() > 5:
+            self.signals.too_many_results.emit(self.pages)
+            got_response = False
+
+            def continue_searching(yes):
+                print("Got continue signal")
+                if yes:
+                    got_response = True
+                else:
+                    return
+            print(type(self.continue_signal))
+            self.continue_signal.connect(continue_searching)
+
+            while not got_response:
+                time.sleep(0.5)
+
+            print("Continues")
+
         # self.OpenPages()
         self.ExtractData()
 
@@ -138,36 +154,35 @@ class EDDCSearch(QRunnable):
         :return: The dict containing the original field and values and also the new generated fields
         TODO Clean me up
         """
-
-        text_key = field.rstrip("$dateInput")
-        date_input_key = field
-        date_input_client_key = field.replace("$", "_") + "_ClientState"
-        calendar_SD_Key = text_key.replace("$", "_") + "_calendar_SD"
-        calendar_AD_Key = text_key.replace("$", "_") + "_calendar_AD"
-        Client_state_Key = text_key.replace("$", "_") + "_ClientState"
+        # Keys
+        dateInputKey = field + "$dateInput"
+        dateInput_ClientKey = dateInputKey.replace("$", "_") + "_ClientState"
+        calendar_SD_Key = field.replace("$", "_") + "_calendar_SD"
+        calendar_AD_Key = field.replace("$", "_") + "_calendar_AD"
+        Client_state_Key = field.replace("$", "_") + "_ClientState"
 
         # Values dependent on if there is a value input or not
         if value:
-            split_date = value.split("/")
-            text_value = "-".join(reversed(split_date))
+            split_date = value.split("-")
+            dateInputValue = "/".join(reversed(split_date))
             extended_date = f"{value}-00-00-00"
             calendar_SD_Value = str([list(map(int, split_date))])
         else:
-            text_value = ""
+            dateInputValue = ""
             extended_date = ""
             calendar_SD_Value = "[]"
 
         dateInput_ClientValue = '{"enabled":true,"emptyMessage":"","validationText":"' + extended_date \
                                 + '","valueAsString":"' + extended_date + \
-                                '","minDateStr":"1980-01-01-00-00-00","maxDateStr":"2099-12-31-00-00-00","lastSetTextBoxValue":"' + value + '"}'
+                                '","minDateStr":"1980-01-01-00-00-00","maxDateStr":"2099-12-31-00-00-00","lastSetTextBoxValue":"' + dateInputValue + '"}'
 
         calendar_AD_Value = f'[[1980,1,1],[2099,12,30],[{",".join(map(str, map(int, str(date.today()).split("-"))))}]]'
 
         # COMPILE INTO DICT
         output = {
-            text_key: text_value,
-            date_input_key: value,
-            date_input_client_key: dateInput_ClientValue,
+            field: value,
+            dateInputKey: dateInputValue,
+            dateInput_ClientKey: dateInput_ClientValue,
             calendar_SD_Key: calendar_SD_Value,
             calendar_AD_Key: calendar_AD_Value,
             Client_state_Key: ""

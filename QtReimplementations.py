@@ -44,6 +44,7 @@ class DateEdit(QDateEdit):
         self.setDate(QDate.fromString("01/01/0001", "dd/MM/yyyy"))
         self.active = False
         self.reset = False
+        self.setDisplayFormat("yyyy-MM-dd")
 
     def resetIfNotActive(self):
         if not self.active and not self.reset:
