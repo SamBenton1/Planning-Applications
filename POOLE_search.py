@@ -136,8 +136,6 @@ class ApplicationRequest(QRunnable):
 
         if response_valid:
             self.HTTP_Responses["page=1"] = response.content
-        else:
-            LogHTML(response)
 
         return response_valid, response_message
 

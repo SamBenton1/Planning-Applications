@@ -20,7 +20,7 @@ def Log(error_message, request=""):
 
 
 def LogHTML(response):
-    with open("failed.html", "w") as error_file:
+    with open("dev/failed.html", "w") as error_file:
         print("writing error html")
         error_file.write(response.content.decode("utf-8"))
 

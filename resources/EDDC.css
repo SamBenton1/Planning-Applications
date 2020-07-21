@@ -1,0 +1,62 @@
+QWidget#scroll-area {
+    background-color: white;
+}
+
+QWidget#content-box {
+    border-width: 2px;
+    border-style: solid;
+    border-color: #aac8e0;
+}
+
+QLabel#title {
+    font-size: 30px;
+    font-weight: 600;
+    text-align: center;
+}
+
+
+
+QLineEdit {
+    border-width: 1px;
+    border-color: #2b2b2b;
+    border-bottom-color: #797979;
+    border-left-color: #797979;
+    border-style: solid;
+    border-radius: 1px;
+    font-size: 15px;
+    padding: 4px 4px;
+    max-width: 350px;
+
+}
+
+QComboBox {
+    font-family: 'Varela Round', sans-serif;
+    border-width: 1px;
+    border-color: #2b2b2b;
+    border-bottom-color: #797979;
+    border-left-color: #797979;
+    border-style: solid;
+    border-radius: 4px;
+    font-size: 15px;
+    padding: 5px 5px;
+    min-width: 350px;
+    max-width: 350px;
+}
+
+QDateEdit {
+    font-family: 'Varela Round', sans-serif;
+    border-width: 1px;
+    border-color: #2b2b2b;
+    border-bottom-color: #797979;
+    border-left-color: #797979;
+    border-style: solid;
+    border-radius: 4px;
+    font-size: 15px;
+    padding: 5px 5px;
+    max-width: 150px;
+}
+
+QPushButton {
+    max-width: 100px;
+    min-height: 30px;
+}

@@ -1,0 +1,23 @@
+QMainWindow {
+    background-color: white;
+}
+
+QWidget#inner-widget {
+    background-color: white;
+}
+
+QPushButton#panel-button {
+    background-color: #ffffff;
+    border-style: solid;
+    border-radius: 10px;
+    border-color: grey;
+    border-width: 1px;
+}
+
+QPushButton#panel-button:hover {
+    border-width: 2px;
+}
+
+QLabel#panel-title {
+    font-size: 35px;
+}
