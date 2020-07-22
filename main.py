@@ -64,7 +64,7 @@ class MainDisplay(QWidget):
         layout = QVBoxLayout()
         layout.setSpacing(30)
 
-        title = QLabel("Select a website\nto search from!")
+        title = QLabel("Select a website to\nuse for your search...")
         title.setObjectName("title")
         self.shadow = QGraphicsDropShadowEffect()
         self.shadow.setColor(QColor("grey"))

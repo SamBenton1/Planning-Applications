@@ -52,7 +52,7 @@ class EDDCSearch(QRunnable):
             ErrorSignal("The results page was only one page or so results!")
             return
 
-        if self.page > 30:
+        if self.pages > 30:
             self.signals.too_many_results.emit(self.pages)
             ErrorSignal("Too many pages of results!")
             return
@@ -384,7 +384,7 @@ class EDDCSearch(QRunnable):
             reference, location, proposal, decision, decision_date, url, app = values
 
             excluded = True
-            if not re.search(r"/T|/REG", reference) and re.search(r"BH21 6", location):
+            if not re.search(r"/T|/REG", reference) and re.search(r"BH21", location) and not re.search(r"BH21 6", location):
                 excluded = False
 
             if excluded:

@@ -1,5 +1,5 @@
 # Planning Applications Search
-###Introduction
+### Introduction
 The planning application search tool is a PyQt5 based GUI that allows the user to compile results
 from a search done through the GUI into a spread sheet for the data to be easily accessible. The search application
 can get result from two websites. The Poole planning applications website and the East Dorset planning applications
