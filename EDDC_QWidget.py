@@ -4,6 +4,8 @@ from PyQt5 import QtCore
 from QtReimplementations import DateEdit
 from select_reference import *
 import EDDC_search
+from signals import FileSavedDialog
+import os
 
 
 # noinspection PyArgumentList
@@ -101,14 +103,18 @@ class EDDC_Widget(QMainWindow):
 
         box_two_layout.addWidget(QLabel("Received Valid Between:"), 1, 0)
         self.received_valid_between_start = DateEdit()
+        self.received_valid_between_start.setDisplayFormat("yyyy-MM-dd")
         self.received_valid_between_end = DateEdit()
+        self.received_valid_between_end.setDisplayFormat("yyyy-MM-dd")
         box_two_layout.addWidget(self.received_valid_between_start, 1, 1)
         box_two_layout.addWidget(QLabel("and", maximumWidth=30), 1, 2)
         box_two_layout.addWidget(self.received_valid_between_end, 1, 3)
 
         box_two_layout.addWidget(QLabel("Issued Between:"), 2, 0)
         self.issued_between_start = DateEdit()
+        self.issued_between_start.setDisplayFormat("yyyy-MM-dd")
         self.issued_between_end = DateEdit()
+        self.issued_between_end.setDisplayFormat("yyyy-MM-dd")
         box_two_layout.addWidget(self.issued_between_start, 2, 1)
         box_two_layout.addWidget(QLabel("and", maximumWidth=30), 2, 2)
         box_two_layout.addWidget(self.issued_between_end, 2, 3)
@@ -143,7 +149,11 @@ class EDDC_Widget(QMainWindow):
 
         box_three_layout.addWidget(QLabel("Appeal decision between:"), 4, 0)
         self.appeal_decision_between_start = DateEdit()
+        self.appeal_decision_between_start.setDisplayFormat("yyyy-MM-dd")
+
         self.appeal_decision_between_end = DateEdit()
+        self.appeal_decision_between_end.setDisplayFormat("yyyy-MM-dd")
+
         box_three_layout.addWidget(self.appeal_decision_between_start, 4, 1)
         box_three_layout.addWidget(QLabel("and", maximumWidth=30), 4, 2)
         box_three_layout.addWidget(self.appeal_decision_between_end, 4, 3)
@@ -163,7 +173,13 @@ class EDDC_Widget(QMainWindow):
         self.reset.clicked.connect(self.Clear)
         bottom_buttons_layout.addWidget(self.reset, alignment=QtCore.Qt.AlignTop)
 
-        self.scroll_area_contents_layout.addWidget(bottom_buttons, 4, 0, 1, 2)
+        self.scroll_area_contents_layout.addWidget(bottom_buttons, 6, 0, 1, 2)
+
+        # ON SEARCH
+        self.progress_bar_label = QLabel("Starting Session...")
+        self.progress_bar_label.setObjectName("progress-label")
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
 
         # ------------------- END SCROLL -----------------------------
 
@@ -218,6 +234,9 @@ class EDDC_Widget(QMainWindow):
             date_edit.reset = False
 
     def Search(self):
+        self.scroll_area_contents_layout.addWidget(self.progress_bar_label, 4, 0, 1, 2)
+        self.scroll_area_contents_layout.addWidget(self.progress_bar, 5, 0, 1, 2)
+
         # SELECT REFERENCE
         parish = EDDC_PARISH.get(self.parish.currentText())
         ward = EDDC_WARD.get(self.ward.currentText())
@@ -227,7 +246,7 @@ class EDDC_Widget(QMainWindow):
         appeal_decision = EDDC_DECISION.get(self.appeal_decision.currentText())
 
         build_request = {
-            "ctl00_ContentPlaceHolder1_chkOutstanding": self.outstanding_only.checkState(), # Query
+            "ctl00_ContentPlaceHolder1_chkOutstanding": "on" if self.outstanding_only.checkState() else "",
             "ctl00$ContentPlaceHolder1$txtAppNumber": self.application_number.text(),
             "ctl00$ContentPlaceHolder1$txtAddress": self.address.text(),
             "ctl00$ContentPlaceHolder1$txtProposal": self.proposal.text(),
@@ -249,18 +268,54 @@ class EDDC_Widget(QMainWindow):
 
         SearchRequest = EDDC_search.EDDCSearch(request_data=build_request)
 
+        # THREAD SIGNAL FUNCTIONS
+        def update_progress(i):
+            self.progress_bar.setValue(i)
+
+        def update_progress_label(msg):
+            self.progress_bar_label.setText(msg)
+            self.progress_bar_label.updateGeometry()
+
+        def update_progress_label_error():
+            self.progress_bar_label.setStyleSheet("color: red;")
+
+        def reset_signal():
+            self.progress_bar_label.setStyleSheet("color: black;")
+            self.progress_bar_label.setParent(None)
+            self.progress_bar.setParent(None)
+            self.scroll_area_contents_layout.removeWidget(self.progress_bar_label)
+            self.scroll_area_contents_layout.removeWidget(self.progress_bar)
+
         def TooManyResults(number):
             self.too_many = QMessageBox()
+            self.too_many.setWindowIcon(QIcon("resources/window_icon.png"))
             self.too_many.setIcon(QMessageBox.Warning)
-            self.too_many.setText(f"Over {number} pages of results found.\nAre you sure you want to continue?\n(It may take a while)")
-            self.too_many.setStandardButtons(QMessageBox.Yes|QMessageBox.Cancel)
+            self.too_many.setText(
+                f"The search returned {number} pages of results. This exceeds the limit for the number"
+                f" of pages of results. To turn off this limit go to settings.")
+            self.too_many.setStandardButtons(QMessageBox.Ok)
             self.too_many.setWindowTitle("Warning")
-            if self.too_many.exec_() == 16384:
-                self.continue_search.emit(True)
-                print("emit True")
+
+            self.too_many.exec_()
+
+        def saveFile(applications):
+            path, extension = QFileDialog.getSaveFileName(filter="Excel Spreadsheet (*.xlsx)",
+                                                          directory=f"{os.getcwd()}/Output CSV/Untitled")
+
+            if extension == "Excel Spreadsheet (*.xlsx)":
+                SearchRequest.WriteXlSX(path, applications)
+                dialog = FileSavedDialog()
+                dialog.exec_()
             else:
-                self.continue_search.emit(False)
+                print("Unrecognised or no file extension")
+
+            reset_signal()
 
         SearchRequest.signals.too_many_results.connect(TooManyResults)
+        SearchRequest.signals.error.connect(update_progress_label_error)
+        SearchRequest.signals.progress.connect(update_progress)
+        SearchRequest.signals.message.connect(update_progress_label)
+        SearchRequest.signals.reset.connect(reset_signal)
+        SearchRequest.signals.finished.connect(saveFile)
 
         self.thread_pool.start(SearchRequest)

@@ -59,4 +59,5 @@ QDateEdit {
 QPushButton {
     max-width: 100px;
     min-height: 30px;
+    font-size: 15px;
 }

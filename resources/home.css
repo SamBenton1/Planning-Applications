@@ -21,3 +21,9 @@ QPushButton#panel-button:hover {
 QLabel#panel-title {
     font-size: 35px;
 }
+
+QLabel#title {
+    font-size: 60px;
+    padding: 10px;
+    background-color: white;
+}

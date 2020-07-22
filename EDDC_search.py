@@ -4,10 +4,12 @@ import requests
 from bs4 import BeautifulSoup
 from PyQt5.QtCore import QRunnable
 from signals import SearchSignals
-import time
+from time import sleep
 from datetime import date
+import xlsxwriter
+import re
 
-# FIXME: MAKE QRUNNABLE
+
 class EDDCSearch(QRunnable):
     session = None
     pages = None
@@ -25,28 +27,31 @@ class EDDCSearch(QRunnable):
         Executed thread by QThreadPool, Manages signals and requests
         :return:
         """
+
         self.StartSession()
+        self.signals.message.emit("Making search request...")
+        self.signals.progress.emit(5)
+
         self.SearchRequest()
-        if self.NumberPages() > 5:
+        self.signals.message.emit("Search results found...")
+        self.signals.progress.emit(10)
+
+        if self.NumberPages() > 30:
             self.signals.too_many_results.emit(self.pages)
-            got_response = False
+            self.signals.error.emit()
+            self.signals.message.emit("Too many pages of results!")
+            self.signals.progress.emit(100)
+            sleep(4)
+            self.signals.reset.emit()
+            return
 
-            def continue_searching(yes):
-                print("Got continue signal")
-                if yes:
-                    got_response = True
-                else:
-                    return
-            print(type(self.continue_signal))
-            self.continue_signal.connect(continue_searching)
-
-            while not got_response:
-                time.sleep(0.5)
-
-            print("Continues")
-
-        # self.OpenPages()
+        self.signals.message.emit(f"Opening {self.pages} pages...")
+        self.OpenPages()
         self.ExtractData()
+        self.signals.message.emit(f"Search returned {len(self.data_set)} results")
+        self.signals.progress.emit(100)
+
+        self.signals.finished.emit(self.data_set)
 
     # STEP 1
     # Start the session with the server
@@ -79,8 +84,8 @@ class EDDCSearch(QRunnable):
         print(f"[LOG] Accepted terms {terms_response}")
         return True
 
-    @staticmethod
     # PRIVATE - Extracts view state from response
+    @staticmethod
     def _GetViewState(response=None, content=None):
         output = {}
         if content:
@@ -237,9 +242,16 @@ class EDDCSearch(QRunnable):
         """
         TODO Check that pages all open with good http response
             perhaps some check if it is the expected page with a scrape
+
         :return:
         """
         event_target = "ctl00$ContentPlaceHolder1$lvResults$RadDataPager1$ctl01$ctl"
+
+        progress = 10
+        if self.pages > 1:
+            progress_per_page = int(90 // (self.pages - 1))
+        else:
+            progress_per_page = 1
 
         for index in range(1, self.pages):
             derived_target = self._GetPageTarget(index)
@@ -254,6 +266,8 @@ class EDDCSearch(QRunnable):
                                               data=prepared_request)
 
             self.HTTP_Responses[f"page={index}"] = page_response.content
+            progress += progress_per_page
+            self.signals.progress.emit(progress)
 
             # with open(f"html_responses/page={index}.html", "w") as file:
             #     file.write(page_response.content.decode("utf-8"))
@@ -266,24 +280,96 @@ class EDDCSearch(QRunnable):
             results = results_area.find_all("div", attrs={"class": "emphasise-area"})
             for result in results:
                 reference = result.find("h2")
+                url = reference.a.attrs["href"]
                 reference = reference.text
+
                 fields = result.find_all("p")
                 fields = [para.text for para in fields]
                 location, proposal, *Decision = fields
                 if Decision:
-                    decision, date = Decision
+                    decision, decision_date = Decision
+                    is_app = False
                 else:
-                    decision = date = ""
+                    is_app = True
+                    decision = decision_date = ""
 
                 application_data = {
                     "Reference": reference,
                     "Location": location,
                     "Proposal": proposal,
                     "Decision": decision,
-                    "Decision Date": date
+                    "Decision Date": decision_date,
+                    "_url": url,
+                    "_Application": is_app
                 }
                 # pprint(application_data)
                 self.data_set.append(application_data)
+
+        pprint(self.data_set)
+
+    # STEP 6
+    @staticmethod
+    def WriteXlSX(path, applications):
+        workbook = xlsxwriter.Workbook(path)
+        bold = workbook.add_format({"bold": True})
+        removed = workbook.add_format()
+        removed.set_font_color('red')
+
+        all_worksheet = workbook.add_worksheet(name="All")
+
+        apps_worksheet = workbook.add_worksheet(name="Applications")
+        apps_index = 1
+
+        dec_worksheet = workbook.add_worksheet(name="Decisions")
+        decs_index = 1
+
+        HEADERS = ["Reference", "Location", "Proposal", "Decision", "Date"]
+
+        all_worksheet.write_row(0, 0, data=HEADERS, cell_format=bold)
+        apps_worksheet.write_row(0, 0, HEADERS[:3], cell_format=bold)
+        dec_worksheet.write_row(0, 0, HEADERS, cell_format=bold)
+
+        for i, app in enumerate(applications):
+            values = [value for value in app.values()]
+            print(values)
+            reference, location, proposal, decision, decision_date, url, app = values
+
+            tree = re.search(r"/T|/REG", reference)
+
+            if tree:
+                is_removed = removed
+            else:
+                is_removed = None
+
+            all_worksheet.write_url(i + 1, 0, f"https://eastplanning.dorsetcouncil.gov.uk/{url}",
+                                    is_removed,
+                                    reference)
+            all_worksheet.write(i + 1, 1, location, is_removed)
+            all_worksheet.write(i + 1, 2, proposal, is_removed)
+            all_worksheet.write(i + 1, 3, decision, is_removed)
+            all_worksheet.write(i + 1, 4, decision_date, is_removed)
+
+            if tree: continue
+
+            if app:
+                apps_worksheet.write_url(apps_index, 0, url=f"https://eastplanning.dorsetcouncil.gov.uk/{url}",
+                                         string=reference)
+                apps_worksheet.write(apps_index, 1, location)
+                apps_worksheet.write(apps_index, 2, proposal)
+                apps_index += 1
+            else:
+                dec_worksheet.write_url(decs_index, 0, url=f"https://eastplanning.dorsetcouncil.gov.uk/{url}",
+                                        string=reference)
+                dec_worksheet.write(decs_index, 1, location)
+                dec_worksheet.write(decs_index, 2, proposal)
+                dec_worksheet.write(decs_index, 3, decision)
+                dec_worksheet.write(decs_index, 4, decision_date)
+                decs_index += 1
+
+        try:
+            workbook.close()
+        except xlsxwriter.workbook.FileCreateError:
+            print("File is open!")
 
 
 if __name__ == '__main__':

@@ -4,46 +4,16 @@ from PyQt5 import QtCore
 import sys
 import os
 from datetime import date
-from POOLE_search import ApplicationRequest
+from POOLE_search import PooleSearch
 from select_reference import *
 from issues import Log
-
-
-# Reimplemented date edit widget to allow for null values
-class DateEdit(QDateEdit):
-    popupSignal = QtCore.pyqtSignal()
-
-    def __init__(self, parent=None):
-        super(DateEdit, self).__init__(parent)
-        self.setCalendarPopup(True)
-        self.calendarWidget().installEventFilter(self)
-        self.setMinimumDate(QtCore.QDate(2010, 1, 1))
-        self.setSpecialValueText(" ")
-        self.setDate(QtCore.QDate.fromString("01/01/0001", "dd/MM/yyyy"))
-        self.active = False
-        self.reset = False
-
-    def resetIfNotActive(self):
-        if not self.active and not self.reset:
-            self.setDate(date.today())
-            self.active = True
-
-    def eventFilter(self, obj, event):
-        if self.calendarWidget() is obj and event.type() == QtCore.QEvent.Show:
-            self.popupSignal.emit()
-            self.resetIfNotActive()
-
-        return super(DateEdit, self).eventFilter(obj, event)
+from QtReimplementations import DateEdit
 
 
 # noinspection PyArgumentList
-class MainWindow(QMainWindow):
-
+class Poole_Widget(QWidget):
     def __init__(self, *args, **kwargs):
-        super(MainWindow, self).__init__(*args, **kwargs)
-        self.setWindowTitle("Planning - Applications Search")
-        self.setMinimumSize(800, 800)
-        self.setWindowIcon(QIcon(r"resources\icon.png"))
+        super(Poole_Widget, self).__init__(*args, **kwargs)
 
         # GUI THREAD POOL
         self.thread_pool = QtCore.QThreadPool()
@@ -52,8 +22,6 @@ class MainWindow(QMainWindow):
         style_sheet = open(r"resources/poole.css").read()
         self.setStyleSheet(style_sheet)
 
-        # Main Widget
-        main_widget = QWidget()
         layout = QVBoxLayout()
         layout.setAlignment(QtCore.Qt.AlignHCenter)
 
@@ -267,8 +235,7 @@ class MainWindow(QMainWindow):
         scroll_area.setWidget(scroll_area_contents)
         layout.addWidget(scroll_area)
 
-        main_widget.setLayout(layout)
-        self.setCentralWidget(main_widget)
+        self.setLayout(layout)
 
         # CONTENTS
         self.combo_boxes = [
@@ -305,13 +272,12 @@ class MainWindow(QMainWindow):
 
         # MESSAGE BOXES
         self.file_written = QMessageBox()
-        self.file_written.setWindowIcon(QIcon(r"resources\icon.png"))
-        self.file_written.setStyleSheet("QLabel{min-width:150 px}")
+        self.file_written.setWindowIcon(QIcon(r"resources\window_icon.png"))
+        self.file_written.setStyleSheet("QLabel{min-width:100 px}")
         self.file_written.setIcon(QMessageBox.Information)
         self.file_written.setText("File saved!")
         self.file_written.setWindowTitle("Information")
         self.file_written.setStandardButtons(QMessageBox.Ok)
-
 
     # Reset all values in input boxes
     def Clear(self):
@@ -332,7 +298,6 @@ class MainWindow(QMainWindow):
 
     # Carries out the search function
     def Search(self):
-
         # FETCH CODES
         case_type = CASE_TYPE.get(self.application_type.currentText())
         ward = WARD.get(self.ward.currentText())
@@ -384,7 +349,7 @@ class MainWindow(QMainWindow):
         self.scroll_area_contents_layout.addWidget(self.progress_bar, 8, 0)
         self.progress_bar_label.setText("Searching...")
 
-        app_request = ApplicationRequest(params=request)
+        app_request = PooleSearch(params=request)
 
         # THREAD SIGNAL FUNCTIONS
         def update_progress(i):
@@ -411,10 +376,10 @@ class MainWindow(QMainWindow):
             print(path)
 
             if extension == "Excel Spreadsheet (*.xlsx)":
-                ApplicationRequest.WriteXLSX(path, applications)
+                PooleSearch.WriteXLSX(path, applications)
                 self.file_written.exec_()
             elif extension == "CSV (*.csv)":
-                ApplicationRequest.WriteCSV(path, applications)
+                PooleSearch.WriteCSV(path, applications)
                 self.file_written.exec_()
             else:
                 Log("Unrecognised or no file extension")
@@ -429,9 +394,3 @@ class MainWindow(QMainWindow):
 
         # START THREAD
         self.thread_pool.start(app_request)
-
-
-app = QApplication(sys.argv)
-window = MainWindow()
-window.show()
-app.exec_()

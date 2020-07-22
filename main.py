@@ -4,7 +4,7 @@ from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from QtReimplementations import PanelButton
 from EDDC_QWidget import EDDC_Widget
-
+from Poole_QWidget import Poole_Widget
 
 # noinspection PyArgumentList
 class MainWindow(QMainWindow):
@@ -13,6 +13,7 @@ class MainWindow(QMainWindow):
         super(MainWindow, self).__init__()
         self.setWindowTitle("Planning Application Search")
         self.setMinimumSize(800, 800)
+        self.setWindowIcon(QIcon("resources/window_icon.png"))
 
         # Set Main Widget
         main_widget = QWidget()
@@ -24,17 +25,22 @@ class MainWindow(QMainWindow):
 
         self.main_display = MainDisplay()
         self.main_display.east_search.clicked.connect(self.GotoEDDC)
+        self.main_display.poole_search.clicked.connect(self.GotoPoole)
 
         self.eddc_search = EDDC_Widget()
+        self.poole_search = Poole_Widget()
 
-        self.layout.addWidget(self.eddc_search)
+        self.layout.addWidget(self.main_display)
         main_widget.setLayout(self.layout)
         self.setCentralWidget(main_widget)
 
     def GotoEDDC(self):
-        print("EDDC")
         self.main_display.setParent(None)
         self.layout.addWidget(self.eddc_search)
+
+    def GotoPoole(self):
+        self.main_display.setParent(None)
+        self.layout.addWidget(self.poole_search)
 
 
 # noinspection PyArgumentList
@@ -50,6 +56,15 @@ class MainDisplay(QWidget):
 
         layout = QVBoxLayout()
         layout.setSpacing(30)
+
+        title = QLabel("Select a website\nto search from!")
+        title.setObjectName("title")
+        self.shadow = QGraphicsDropShadowEffect()
+        self.shadow.setColor(QColor("grey"))
+        self.shadow.setBlurRadius(8)
+        self.shadow.setOffset(5, 5)
+        title.setGraphicsEffect(self.shadow)
+        layout.addWidget(title, alignment=Qt.AlignCenter)
 
         # POOLE
         self.poole_search = PanelButton()

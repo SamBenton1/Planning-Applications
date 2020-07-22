@@ -22,7 +22,7 @@ class ApplicationSignals(QObject):
     finished = pyqtSignal(object)
 
 
-class ApplicationRequest(QRunnable):
+class PooleSearch(QRunnable):
     # r"http://httpbin.org/get"
     URL = "https://boppa.poole.gov.uk/online-applications/advancedSearchResults.do"
 
@@ -33,7 +33,7 @@ class ApplicationRequest(QRunnable):
     data_set = None
 
     def __init__(self, params):
-        super(ApplicationRequest, self).__init__()
+        super(PooleSearch, self).__init__()
 
         # SEARCH PARAMETERS
         self.request_params = params
@@ -147,7 +147,7 @@ class ApplicationRequest(QRunnable):
         STEP I: Check status code
         STEP II: Check page title
         STEP III: If back on search page, check for message box
-        TODO STEP IV: Check if the page is a response page
+        STEP IV: Check if the page is a response page
 
         :param response: http response from GET request
         :return: Boolean and message as to whether the page is valid results or not.
