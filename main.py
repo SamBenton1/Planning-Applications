@@ -81,7 +81,7 @@ class MainDisplay(QWidget):
 
         # Icon
         poole_icon = QLabel()
-        poole_icon.setPixmap(QPixmap("resources/icon.png"))
+        poole_icon.setPixmap(QPixmap("resources/Poole_icon.png"))
         poole_icon.setScaledContents(True)
         poole_icon.setFixedSize(160, 160)
         poole_layout.addWidget(poole_icon, 0, 0)

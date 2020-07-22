@@ -302,7 +302,6 @@ class EDDCSearch(QRunnable):
             page_response = self.session.post(url="https://eastplanning.dorsetcouncil.gov.uk/searchresults.aspx",
                                               data=prepared_request)
 
-            # TODO: Uncomment
             if page_response.status_code != 200:
                 Log(f"Tried to open page {index-1} of results but got bad status code {page_response.status_code}")
 

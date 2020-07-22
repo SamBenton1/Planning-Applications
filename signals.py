@@ -16,6 +16,8 @@ class SearchSignals(QObject):
     finished = pyqtSignal(object)
 
 
+# DIALOG BOXES
+
 class FileSavedDialog(PyQt5.QtWidgets.QMessageBox):
     def __init__(self):
         super(FileSavedDialog, self).__init__()
@@ -25,3 +27,15 @@ class FileSavedDialog(PyQt5.QtWidgets.QMessageBox):
         self.setText("File saved!")
         self.setWindowTitle("Information")
         self.setStandardButtons(PyQt5.QtWidgets.QMessageBox.Ok)
+
+
+class TooManyResultsDialog(PyQt5.QtWidgets.QMessageBox):
+    def __init__(self, number):
+        super(TooManyResultsDialog, self).__init__()
+        self.setWindowIcon(QIcon("resources/window_icon.png"))
+        self.setIcon(PyQt5.QtWidgets.QMessageBox.Warning)
+        self.setText(
+            f"The search returned {number} pages of results. This exceeds the limit for the number"
+            f" of pages of results. To turn off this limit go to settings.")
+        self.setStandardButtons(PyQt5.QtWidgets.QMessageBox.Ok)
+        self.setWindowTitle("Warning")

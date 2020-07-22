@@ -5,7 +5,7 @@ from PyQt5.QtCore import *
 import time
 import concurrent.futures
 import xlsxwriter
-from issues import Log, LogIssue
+from issues import Log
 from signals import SearchSignals
 
 
@@ -72,6 +72,10 @@ class PooleSearch(QRunnable):
         number_results = self.NumberResults()
         self.signals.progress.emit(15)
         self.signals.message.emit(f"Found {number_results} results over {self.pages} pages...")
+
+        if self.pages > 30:
+            Error("Too many pages will open")
+            self.signals.too_many_results.emit(self.pages)
 
         # OPEN ALL SUBSEQUENT PAGES
         self.OpenPages()
@@ -155,7 +159,6 @@ class PooleSearch(QRunnable):
 
         if not raw_page_title:
             Log(f"Web page title not found.", request=self.request_params)
-            LogIssue("Title element not found", request=self.request_params)
             return False, "Page title not found"
         else:
             page_title = raw_page_title.text.strip()
@@ -179,7 +182,6 @@ class PooleSearch(QRunnable):
                 return True, "single"
             else:
                 Log("Unexpected page title", request=self.request_params)
-                LogIssue("Unexpected page title", request=self.request_params)
                 return False, "Unexpected page title"
 
     # STEP 3

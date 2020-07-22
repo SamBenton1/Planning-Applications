@@ -1,13 +1,12 @@
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import QIcon, QPixmap
 from PyQt5 import QtCore
-import sys
 import os
-from datetime import date
 from POOLE_search import PooleSearch
 from select_reference import *
 from issues import Log
 from QtReimplementations import DateEdit
+from signals import TooManyResultsDialog
 
 
 # noinspection PyArgumentList
@@ -39,7 +38,7 @@ class Poole_Widget(QWidget):
         title_layout.setSpacing(20)
 
         title_icon = QLabel()
-        title_icon.setPixmap(QPixmap("resources/icon.png"))
+        title_icon.setPixmap(QPixmap("resources/Poole_icon.png"))
         title_icon.setFixedSize(80, 80)
         title_icon.setScaledContents(True)
         title_layout.addWidget(title_icon)
@@ -378,6 +377,10 @@ class Poole_Widget(QWidget):
         def update_progress_label_error():
             self.progress_bar_label.setStyleSheet("color: red;")
 
+        def too_many_results(number):
+            too_many = TooManyResultsDialog(number)
+            too_many.exec_()
+
         def reset_signal():
             self.progress_bar_label.setStyleSheet("color: black;")
             self.progress_bar_label.setParent(None)
@@ -407,6 +410,7 @@ class Poole_Widget(QWidget):
         app_request.signals.error.connect(update_progress_label_error)
         app_request.signals.reset.connect(reset_signal)
         app_request.signals.finished.connect(saveFile)
+        app_request.signals.too_many_results.connect(too_many_results)
 
         # START THREAD
         self.thread_pool.start(app_request)

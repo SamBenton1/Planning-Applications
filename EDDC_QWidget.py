@@ -4,7 +4,7 @@ from PyQt5 import QtCore
 from QtReimplementations import DateEdit
 from select_reference import *
 import EDDC_search
-from signals import FileSavedDialog
+from signals import FileSavedDialog, TooManyResultsDialog
 import os
 
 
@@ -291,16 +291,8 @@ class EDDC_Widget(QMainWindow):
             self.scroll_area_contents_layout.removeWidget(self.progress_bar)
 
         def TooManyResults(number):
-            self.too_many = QMessageBox()
-            self.too_many.setWindowIcon(QIcon("resources/window_icon.png"))
-            self.too_many.setIcon(QMessageBox.Warning)
-            self.too_many.setText(
-                f"The search returned {number} pages of results. This exceeds the limit for the number"
-                f" of pages of results. To turn off this limit go to settings.")
-            self.too_many.setStandardButtons(QMessageBox.Ok)
-            self.too_many.setWindowTitle("Warning")
-
-            self.too_many.exec_()
+            too_many = TooManyResultsDialog(number)
+            too_many.exec_()
 
         def saveFile(applications):
             path, extension = QFileDialog.getSaveFileName(filter="Excel Spreadsheet (*.xlsx)",
