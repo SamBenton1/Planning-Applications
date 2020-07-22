@@ -8,6 +8,7 @@ from time import sleep
 from datetime import date
 import xlsxwriter
 import re
+from issues import Log
 
 
 class EDDCSearch(QRunnable):
@@ -15,6 +16,7 @@ class EDDCSearch(QRunnable):
     pages = None
     view_state = {}
     HTTP_Responses = {}
+    prepared_request = {}
     data_set = []
 
     def __init__(self, request_data):
@@ -28,7 +30,17 @@ class EDDCSearch(QRunnable):
         :return:
         """
 
-        self.StartSession()
+        def ErrorSignal(msg):
+            self.signals.error.emit()
+            self.signals.message.emit(msg)
+            self.signals.progress.emit(100)
+            sleep(4)
+            self.signals.reset.emit()
+
+        if not self.StartSession():
+            ErrorSignal("No Internet Connection")
+            return
+
         self.signals.message.emit("Making search request...")
         self.signals.progress.emit(5)
 
@@ -36,13 +48,13 @@ class EDDCSearch(QRunnable):
         self.signals.message.emit("Search results found...")
         self.signals.progress.emit(10)
 
-        if self.NumberPages() > 30:
+        if not self.NumberPages():
+            ErrorSignal("The results page was only one page or so results!")
+            return
+
+        if self.page > 30:
             self.signals.too_many_results.emit(self.pages)
-            self.signals.error.emit()
-            self.signals.message.emit("Too many pages of results!")
-            self.signals.progress.emit(100)
-            sleep(4)
-            self.signals.reset.emit()
+            ErrorSignal("Too many pages of results!")
             return
 
         self.signals.message.emit(f"Opening {self.pages} pages...")
@@ -59,20 +71,25 @@ class EDDCSearch(QRunnable):
         """
         Starts the session by accessing the index page for the planning board.
         :return: Boolean value for session stated status
-
-        TODO:
-            - Check http status code
-            - Check got all view state params
-            - Check Response from post is valid
-
         """
 
         copyright_url = "https://eastplanning.dorsetcouncil.gov.uk/"
         self.session = requests.Session()
 
-        copyright_response = self.session.get(copyright_url)
-        print(f"[LOG] Got response {copyright_response}")
+        # Check internet connection & start session
+        try:
+            copyright_response = self.session.get(copyright_url)
+        except requests.exceptions.ConnectionError:
+            return False
 
+        # Check status code
+        if copyright_response.status_code != 200:
+            Log(f"Unexpected http response status code <{copyright_response.status_code}>")
+            return False
+
+        print(f"[LOG] Website responded with {copyright_response}")
+
+        # Make request dict
         copyright_accept_request = self._GetViewState(copyright_response)
         copyright_accept_request.update({"ctl00$ContentPlaceHolder1$btnAccept": "Accept"})
 
@@ -87,14 +104,21 @@ class EDDCSearch(QRunnable):
     # PRIVATE - Extracts view state from response
     @staticmethod
     def _GetViewState(response=None, content=None):
+        """
+        Given only a response object or response content, this method extracts the view state parameters needed
+        for session persistence whilst interacting with the ASP.NET server.
+        :param response: Response object
+        :param content: Response content
+        :return: Dictionary with view state parameters
+        """
         output = {}
         if content:
             soup = BeautifulSoup(content, "html.parser")
         elif response:
             soup = BeautifulSoup(response.content, "html.parser")
-
         else:
-            raise TypeError
+            Log("Protected class _GetViewState got unexpected arguments")
+            return output
 
         input_elements = soup.find_all("input")
         for element in input_elements:
@@ -103,20 +127,23 @@ class EDDCSearch(QRunnable):
                 if name.startswith("__"):
                     output[name] = element.attrs.get("value")
 
+        # Output is view state params dict
         return output
 
     # STEP 2
     # Make the search request
     def SearchRequest(self):
+        """
+        Compiles a dict which is then posted to the server in order to later get back search results.
+
+        :return: Boolean value of if the response from the post request was valid
+        """
 
         # GO TO ADVANCED SEARCH
         search_url = "https://eastplanning.dorsetcouncil.gov.uk/advsearch.aspx"
         search_page = self.session.get(search_url)
 
-        # with open("html_responses/AdvancedSearch.html", "w") as outfile:
-        #     outfile.write(search_page.content.decode("utf-8"))
-
-        # Starts with just the search button
+        # Initialise the request params with an empty dict
         prepared_request = {}
 
         # Get the view states
@@ -134,21 +161,24 @@ class EDDCSearch(QRunnable):
             if value == " ":
                 continue
 
+            # Generate ASP.NET hidden input fields according to the dates
             if "Date" in key:
                 prepared_request.update(self._GenerateHiddenFields(key, value))
             else:
                 prepared_request.update({key: value})
 
         pprint(prepared_request)
-        # pprint(dict(self.session.cookies))
+        self.prepared_request = prepared_request
 
+        # POST request parameters to the server
         search_response = self.session.post(url="https://eastplanning.dorsetcouncil.gov.uk/advsearch.aspx",
                                             data=prepared_request)
 
-        self.HTTP_Responses["page=0"] = search_response.content
+        # TODO: Check good status code for search_response and then add
+        #   To ensure that the status code is always good
 
-        print("Search Response: ", search_response)
-        print("History: ", search_response.history)
+        self.HTTP_Responses["page=0"] = search_response.content
+        print(f"[LOG] First search page retrieved with {search_response}")
 
     @staticmethod
     # PRIVATE - Generates hidden input fields
@@ -157,40 +187,40 @@ class EDDCSearch(QRunnable):
         :param field: The POST request field that will having the hidden fields generated for
         :param value: The input value entered into the input box
         :return: The dict containing the original field and values and also the new generated fields
-        TODO Clean me up
         """
         # Keys
-        dateInputKey = field + "$dateInput"
-        dateInput_ClientKey = dateInputKey.replace("$", "_") + "_ClientState"
-        calendar_SD_Key = field.replace("$", "_") + "_calendar_SD"
-        calendar_AD_Key = field.replace("$", "_") + "_calendar_AD"
-        Client_state_Key = field.replace("$", "_") + "_ClientState"
+        date_input_key = field + "$dateInput"
+        date_input_client_key = date_input_key.replace("$", "_") + "_ClientState"
+        calendar_sd_key = field.replace("$", "_") + "_calendar_SD"
+        calendar_ad_key = field.replace("$", "_") + "_calendar_AD"
+        client_state_key = field.replace("$", "_") + "_ClientState"
 
         # Values dependent on if there is a value input or not
         if value:
             split_date = value.split("-")
-            dateInputValue = "/".join(reversed(split_date))
+            date_input_value = "/".join(reversed(split_date))
             extended_date = f"{value}-00-00-00"
-            calendar_SD_Value = str([list(map(int, split_date))])
+            calendar_sd_value = str([list(map(int, split_date))])
         else:
-            dateInputValue = ""
+            date_input_value = ""
             extended_date = ""
-            calendar_SD_Value = "[]"
+            calendar_sd_value = "[]"
 
-        dateInput_ClientValue = '{"enabled":true,"emptyMessage":"","validationText":"' + extended_date \
-                                + '","valueAsString":"' + extended_date + \
-                                '","minDateStr":"1980-01-01-00-00-00","maxDateStr":"2099-12-31-00-00-00","lastSetTextBoxValue":"' + dateInputValue + '"}'
+        date_input_client_value = '{"enabled":true,"emptyMessage":"","validationText":"' + extended_date \
+                                  + '","valueAsString":"' + extended_date + \
+                                  '","minDateStr":"1980-01-01-00-00-00","maxDateStr":"2099-12-31-00-00-00",' \
+                                  '"lastSetTextBoxValue":"' + date_input_value + '"} '
 
-        calendar_AD_Value = f'[[1980,1,1],[2099,12,30],[{",".join(map(str, map(int, str(date.today()).split("-"))))}]]'
+        calendar_ad_value = f'[[1980,1,1],[2099,12,30],[{",".join(map(str, map(int, str(date.today()).split("-"))))}]]'
 
         # COMPILE INTO DICT
         output = {
             field: value,
-            dateInputKey: dateInputValue,
-            dateInput_ClientKey: dateInput_ClientValue,
-            calendar_SD_Key: calendar_SD_Value,
-            calendar_AD_Key: calendar_AD_Value,
-            Client_state_Key: ""
+            date_input_key: date_input_value,
+            date_input_client_key: date_input_client_value,
+            calendar_sd_key: calendar_sd_value,
+            calendar_ad_key: calendar_ad_value,
+            client_state_key: ""
         }
 
         return output
@@ -207,8 +237,8 @@ class EDDCSearch(QRunnable):
         page_header = soup.find("div", id="ctl00_ContentPlaceHolder1_lvResults_RadDataPager1")
 
         if not page_header:
-            # TODO: Fix exception
-            raise Exception
+            Log("Page Header Not Expected", request=self.prepared_request)
+            return False
 
         # If there is pages
         header_parts = page_header.text.split()
@@ -216,7 +246,7 @@ class EDDCSearch(QRunnable):
             *_, number_pages = header_parts
             self.pages = int(number_pages)
         else:
-            print("[ERROR] Unexpected page header")
+            Log("[ERROR] Unexpected page header")
             print(page_header)
             self.pages = 0
 
@@ -226,6 +256,11 @@ class EDDCSearch(QRunnable):
     @staticmethod
     # PRIVATE - Creates the Target page index number
     def _GetPageTarget(index):
+        """
+        Works out what the target index will be for the request
+        :param index: The actual page number that is being requested
+        :return: The index that will be in the event target parameter
+        """
         if index < 11:
             return index
         tens, units = str(index)
@@ -238,21 +273,23 @@ class EDDCSearch(QRunnable):
             return int(units) + 1
 
     # STEP 4
+    # Request each page of results.
     def OpenPages(self):
         """
-        TODO Check that pages all open with good http response
-            perhaps some check if it is the expected page with a scrape
-
-        :return:
+        Unlike the Poole search this one does not use threading and the ASP.NET event validator from the
+        previous page is needed. Requests each page in series
+        :return: None
         """
         event_target = "ctl00$ContentPlaceHolder1$lvResults$RadDataPager1$ctl01$ctl"
 
+        # Work out how much progress each page is
         progress = 10
         if self.pages > 1:
             progress_per_page = int(90 // (self.pages - 1))
         else:
             progress_per_page = 1
 
+        # Open each page
         for index in range(1, self.pages):
             derived_target = self._GetPageTarget(index)
             page_string = str(derived_target).rjust(2, "0")
@@ -265,15 +302,27 @@ class EDDCSearch(QRunnable):
             page_response = self.session.post(url="https://eastplanning.dorsetcouncil.gov.uk/searchresults.aspx",
                                               data=prepared_request)
 
+            # TODO: Uncomment
+            if page_response.status_code != 200:
+                Log(f"Tried to open page {index-1} of results but got bad status code {page_response.status_code}")
+
+            # Save the response content in dict
             self.HTTP_Responses[f"page={index}"] = page_response.content
             progress += progress_per_page
             self.signals.progress.emit(progress)
 
-            # with open(f"html_responses/page={index}.html", "w") as file:
-            #     file.write(page_response.content.decode("utf-8"))
-
     # STEP 5
+    # Use scraping to extract the data from the results page
     def ExtractData(self):
+        """
+        Extract the data from each response page and store it in a dict which is then appended to the master
+        data set which is returned from the Run method in the form of a pyqtSignal.
+
+        NOTE: This method should only be called if it has been determined that each of the response.contents
+        have a results list present on them as no check is done in this method and an exception will be raised.
+
+        :return: the list dataset
+        """
         for page, content in self.HTTP_Responses.items():
             soup = BeautifulSoup(content, "html.parser")
             results_area = soup.find("div", id="news_results_list")
@@ -306,6 +355,7 @@ class EDDCSearch(QRunnable):
                 self.data_set.append(application_data)
 
         pprint(self.data_set)
+        return self.data_set
 
     # STEP 6
     @staticmethod
@@ -334,9 +384,11 @@ class EDDCSearch(QRunnable):
             print(values)
             reference, location, proposal, decision, decision_date, url, app = values
 
-            tree = re.search(r"/T|/REG", reference)
+            excluded = True
+            if not re.search(r"/T|/REG", reference) and re.search(r"BH21 6", location):
+                excluded = False
 
-            if tree:
+            if excluded:
                 is_removed = removed
             else:
                 is_removed = None
@@ -349,7 +401,7 @@ class EDDCSearch(QRunnable):
             all_worksheet.write(i + 1, 3, decision, is_removed)
             all_worksheet.write(i + 1, 4, decision_date, is_removed)
 
-            if tree: continue
+            if excluded: continue
 
             if app:
                 apps_worksheet.write_url(apps_index, 0, url=f"https://eastplanning.dorsetcouncil.gov.uk/{url}",
@@ -369,15 +421,5 @@ class EDDCSearch(QRunnable):
         try:
             workbook.close()
         except xlsxwriter.workbook.FileCreateError:
-            print("File is open!")
+            Log("Unable to write xlsx file as permission was denied by the OS")
 
-
-if __name__ == '__main__':
-    # Date format: yyyy-mm-dd
-    test_request = {
-        "ctl00$ContentPlaceHolder1$txtDateIssuedFrom": "2020-07-03",
-        "ctl00$ContentPlaceHolder1$txtDateReceivedTo": "2020-07-15"
-    }
-
-    test = EDDCSearch(request_data=test_request)
-    test.run()

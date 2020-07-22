@@ -26,6 +26,7 @@ def LogHTML(response):
 
 
 def LogIssue(title, request):
+    # TODO: Remove instances of log issues used in Poole Search
     return
     git = Github(TOKEN)
     repo = git.get_repo("SamBenton1/Planning-Applications")

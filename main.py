@@ -28,7 +28,9 @@ class MainWindow(QMainWindow):
         self.main_display.poole_search.clicked.connect(self.GotoPoole)
 
         self.eddc_search = EDDC_Widget()
+        self.eddc_search.back_button.clicked.connect(self.GotoHome)
         self.poole_search = Poole_Widget()
+        self.poole_search.back_button.clicked.connect(self.GotoHome)
 
         self.layout.addWidget(self.main_display)
         main_widget.setLayout(self.layout)
@@ -41,6 +43,11 @@ class MainWindow(QMainWindow):
     def GotoPoole(self):
         self.main_display.setParent(None)
         self.layout.addWidget(self.poole_search)
+
+    def GotoHome(self):
+        self.poole_search.setParent(None)
+        self.eddc_search.setParent(None)
+        self.layout.addWidget(self.main_display)
 
 
 # noinspection PyArgumentList

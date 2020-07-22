@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import *
-from PyQt5.QtGui import QIcon
+from PyQt5.QtGui import QIcon, QPixmap
 from PyQt5 import QtCore
 import sys
 import os
@@ -19,7 +19,7 @@ class Poole_Widget(QWidget):
         self.thread_pool = QtCore.QThreadPool()
 
         # Style
-        style_sheet = open(r"resources/poole.css").read()
+        style_sheet = open(r"resources/Poole.css").read()
         self.setStyleSheet(style_sheet)
 
         layout = QVBoxLayout()
@@ -35,9 +35,20 @@ class Poole_Widget(QWidget):
 
         # ------------------- START SCROLL -----------------------------
 
-        title = QLabel("Applications Search")
+        title_layout = QHBoxLayout()
+        title_layout.setSpacing(20)
+
+        title_icon = QLabel()
+        title_icon.setPixmap(QPixmap("resources/icon.png"))
+        title_icon.setFixedSize(80, 80)
+        title_icon.setScaledContents(True)
+        title_layout.addWidget(title_icon)
+
+        title = QLabel("Poole Applications Search")
         title.setObjectName("title")
-        self.scroll_area_contents_layout.addWidget(title, 0, 0, alignment=QtCore.Qt.AlignHCenter)
+        title_layout.addWidget(title)
+
+        self.scroll_area_contents_layout.addItem(title_layout, 0, 0, alignment=QtCore.Qt.AlignHCenter)
 
         # ------------ REFERENCE NUMBERS ---------------
 
@@ -234,6 +245,11 @@ class Poole_Widget(QWidget):
         scroll_area_contents.setLayout(self.scroll_area_contents_layout)
         scroll_area.setWidget(scroll_area_contents)
         layout.addWidget(scroll_area)
+
+        # Back Button
+        self.back_button = QPushButton("Back")
+        self.back_button.setObjectName("back-button")
+        layout.addWidget(self.back_button, alignment=QtCore.Qt.AlignLeft)
 
         self.setLayout(layout)
 

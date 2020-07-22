@@ -17,7 +17,7 @@ QLabel {
 }
 
 QLabel#title {
-    font-size: 30px;
+    font-size: 40px;
     font-weight: 600;
     text-align: center;
 }
@@ -77,4 +77,8 @@ QPushButton {
 
 QPushButton:hover {
     background-color: #4a4c4c;
+}
+
+QPushButton#back-button {
+    max-width: 70px;
 }

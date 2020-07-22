@@ -29,7 +29,7 @@ class EDDC_Widget(QMainWindow):
         # Scroll Area
         scroll_area = QScrollArea()
         scroll_area.setMaximumWidth(850)
-        scroll_area.setMaximumHeight(800)
+        scroll_area.setMaximumHeight(900)
         scroll_area.setWidgetResizable(True)
         scroll_area_contents = QWidget()
         scroll_area_contents.setObjectName("scroll-area")
@@ -186,6 +186,10 @@ class EDDC_Widget(QMainWindow):
         scroll_area_contents.setLayout(self.scroll_area_contents_layout)
         scroll_area.setWidget(scroll_area_contents)
         layout.addWidget(scroll_area)
+
+        # Back Button
+        self.back_button = QPushButton("Back")
+        layout.addWidget(self.back_button)
 
         main_widget.setLayout(layout)
         self.setCentralWidget(main_widget)

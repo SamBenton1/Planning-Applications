@@ -5,7 +5,8 @@ from PyQt5.QtCore import *
 import time
 import concurrent.futures
 import xlsxwriter
-from issues import Log, LogIssue, LogHTML
+from issues import Log, LogIssue
+from signals import SearchSignals
 
 
 # Returns string formatted time
@@ -13,17 +14,7 @@ def clock():
     return time.strftime('%d/%m/%Y %H:%M:%S', time.localtime())
 
 
-# Contains all the signals send from the back end class to the front end GUI.
-class ApplicationSignals(QObject):
-    progress = pyqtSignal(int)
-    message = pyqtSignal(str)
-    error = pyqtSignal()
-    reset = pyqtSignal()
-    finished = pyqtSignal(object)
-
-
 class PooleSearch(QRunnable):
-    # r"http://httpbin.org/get"
     URL = "https://boppa.poole.gov.uk/online-applications/advancedSearchResults.do"
 
     # DECLARE ATTRIBUTES
@@ -37,7 +28,7 @@ class PooleSearch(QRunnable):
 
         # SEARCH PARAMETERS
         self.request_params = params
-        self.signals = ApplicationSignals()
+        self.signals = SearchSignals()
 
     # CLASS THREAD
     def run(self):
