@@ -6,7 +6,7 @@ from cx_Freeze import setup, Executable
 
 build_exe_options = {
     "includes": ["PyQt5"],
-    "include_files": ["resources", "errors.log", "Workbooks"],
+    "include_files": ["resources", "errors.log", "Workbooks", "settings.json"],
     "optimize": 1,
 }
 
