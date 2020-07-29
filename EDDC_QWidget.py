@@ -187,10 +187,6 @@ class EDDC_Widget(QMainWindow):
         scroll_area.setWidget(scroll_area_contents)
         layout.addWidget(scroll_area)
 
-        # Back Button
-        self.back_button = QPushButton("Back")
-        layout.addWidget(self.back_button)
-
         main_widget.setLayout(layout)
         self.setCentralWidget(main_widget)
 
@@ -289,6 +285,8 @@ class EDDC_Widget(QMainWindow):
             self.progress_bar.setParent(None)
             self.scroll_area_contents_layout.removeWidget(self.progress_bar_label)
             self.scroll_area_contents_layout.removeWidget(self.progress_bar)
+            self.progress_bar.setValue(0)
+            self.progress_bar_label.setText("Starting Session...")
 
         def TooManyResults(number):
             too_many = TooManyResultsDialog(number)

@@ -22,7 +22,7 @@ class FileSavedDialog(PyQt5.QtWidgets.QMessageBox):
     def __init__(self):
         super(FileSavedDialog, self).__init__()
         self.setWindowIcon(QIcon(r"resources\window_icon.png"))
-        self.setStyleSheet("QLabel{min-width:100 px}")
+        self.setStyleSheet("QLabel{min-width:70 px}")
         self.setIcon(PyQt5.QtWidgets.QMessageBox.Information)
         self.setText("File saved!")
         self.setWindowTitle("Information")
@@ -36,6 +36,6 @@ class TooManyResultsDialog(PyQt5.QtWidgets.QMessageBox):
         self.setIcon(PyQt5.QtWidgets.QMessageBox.Warning)
         self.setText(
             f"The search returned {number} pages of results. This exceeds the limit for the number"
-            f" of pages of results. To turn off this limit go to settings.")
+            f" of pages. To turn off or change this limit edit settings.json.")
         self.setStandardButtons(PyQt5.QtWidgets.QMessageBox.Ok)
         self.setWindowTitle("Warning")

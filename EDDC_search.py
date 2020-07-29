@@ -1,5 +1,4 @@
 from pprint import pprint
-import concurrent.futures
 import requests
 from bs4 import BeautifulSoup
 from PyQt5.QtCore import QRunnable
@@ -9,7 +8,10 @@ from datetime import date
 import xlsxwriter
 import re
 from issues import Log
+import json
 
+with open("settings.json") as settings_file:
+    settings = json.load(settings_file)
 
 class EDDCSearch(QRunnable):
     session = None
@@ -49,10 +51,10 @@ class EDDCSearch(QRunnable):
         self.signals.progress.emit(10)
 
         if not self.NumberPages():
-            ErrorSignal("The results page was only one page or so results!")
+            ErrorSignal("An error occurred when collecting results. Check the log for more info.")
             return
 
-        if self.pages > 30:
+        if self.pages > settings["page_limit"]:
             self.signals.too_many_results.emit(self.pages)
             ErrorSignal("Too many pages of results!")
             return
@@ -174,8 +176,10 @@ class EDDCSearch(QRunnable):
         search_response = self.session.post(url="https://eastplanning.dorsetcouncil.gov.uk/advsearch.aspx",
                                             data=prepared_request)
 
-        # TODO: Check good status code for search_response and then add
-        #   To ensure that the status code is always good
+        print(f"[LOG] Search POST request {search_response}")
+
+        if not search_response.ok:
+            Log(f"Bad http response from POST request {search_response}", request=prepared_request)
 
         self.HTTP_Responses["page=0"] = search_response.content
         print(f"[LOG] First search page retrieved with {search_response}")
@@ -237,7 +241,7 @@ class EDDCSearch(QRunnable):
         page_header = soup.find("div", id="ctl00_ContentPlaceHolder1_lvResults_RadDataPager1")
 
         if not page_header:
-            Log("Page Header Not Expected", request=self.prepared_request)
+            Log("Unexpected page header, likely due to one page of results.", request=self.prepared_request)
             return False
 
         # If there is pages
@@ -353,7 +357,8 @@ class EDDCSearch(QRunnable):
                 # pprint(application_data)
                 self.data_set.append(application_data)
 
-        pprint(self.data_set)
+        # pprint(self.data_set)
+        print(f"[LOG] Data set created")
         return self.data_set
 
     # STEP 6
@@ -364,58 +369,87 @@ class EDDCSearch(QRunnable):
         removed = workbook.add_format()
         removed.set_font_color('red')
 
-        all_worksheet = workbook.add_worksheet(name="All")
+        def advanced_output():
+            all_worksheet = workbook.add_worksheet(name="All")
 
-        apps_worksheet = workbook.add_worksheet(name="Applications")
-        apps_index = 1
+            apps_worksheet = workbook.add_worksheet(name="Applications")
+            apps_index = 1
 
-        dec_worksheet = workbook.add_worksheet(name="Decisions")
-        decs_index = 1
+            dec_worksheet = workbook.add_worksheet(name="Decisions")
+            decs_index = 1
 
-        HEADERS = ["Reference", "Location", "Proposal", "Decision", "Date"]
+            HEADERS = ["Reference", "Location", "Proposal", "Decision", "Date"]
 
-        all_worksheet.write_row(0, 0, data=HEADERS, cell_format=bold)
-        apps_worksheet.write_row(0, 0, HEADERS[:3], cell_format=bold)
-        dec_worksheet.write_row(0, 0, HEADERS, cell_format=bold)
+            all_worksheet.write_row(0, 0, data=HEADERS, cell_format=bold)
+            apps_worksheet.write_row(0, 0, HEADERS[:3], cell_format=bold)
+            dec_worksheet.write_row(0, 0, HEADERS, cell_format=bold)
 
-        for i, app in enumerate(applications):
-            values = [value for value in app.values()]
-            print(values)
-            reference, location, proposal, decision, decision_date, url, app = values
+            for i, app in enumerate(applications):
+                values = [value for value in app.values()]
+                print(values)
+                reference, location, proposal, decision, decision_date, url, app = values
 
-            excluded = True
-            if not re.search(r"/T|/REG", reference) and re.search(r"BH21", location) and not re.search(r"BH21 6", location):
-                excluded = False
+                excluded = True
+                if not re.search(r"/T|/REG", reference) and re.search(r"BH21", location) and not re.search(r"BH21 6", location):
+                    excluded = False
 
-            if excluded:
-                is_removed = removed
-            else:
-                is_removed = None
+                if excluded:
+                    is_removed = removed
+                else:
+                    is_removed = None
 
-            all_worksheet.write_url(i + 1, 0, f"https://eastplanning.dorsetcouncil.gov.uk/{url}",
-                                    is_removed,
-                                    reference)
-            all_worksheet.write(i + 1, 1, location, is_removed)
-            all_worksheet.write(i + 1, 2, proposal, is_removed)
-            all_worksheet.write(i + 1, 3, decision, is_removed)
-            all_worksheet.write(i + 1, 4, decision_date, is_removed)
+                all_worksheet.write_url(i + 1, 0, f"https://eastplanning.dorsetcouncil.gov.uk/{url}",
+                                        is_removed,
+                                        reference)
+                all_worksheet.write(i + 1, 1, location, is_removed)
+                all_worksheet.write(i + 1, 2, proposal, is_removed)
+                all_worksheet.write(i + 1, 3, decision, is_removed)
+                all_worksheet.write(i + 1, 4, decision_date, is_removed)
 
-            if excluded: continue
+                if excluded: continue
 
-            if app:
-                apps_worksheet.write_url(apps_index, 0, url=f"https://eastplanning.dorsetcouncil.gov.uk/{url}",
-                                         string=reference)
-                apps_worksheet.write(apps_index, 1, location)
-                apps_worksheet.write(apps_index, 2, proposal)
-                apps_index += 1
-            else:
-                dec_worksheet.write_url(decs_index, 0, url=f"https://eastplanning.dorsetcouncil.gov.uk/{url}",
-                                        string=reference)
-                dec_worksheet.write(decs_index, 1, location)
-                dec_worksheet.write(decs_index, 2, proposal)
-                dec_worksheet.write(decs_index, 3, decision)
-                dec_worksheet.write(decs_index, 4, decision_date)
-                decs_index += 1
+                if app:
+                    apps_worksheet.write_url(apps_index, 0, url=f"https://eastplanning.dorsetcouncil.gov.uk/{url}",
+                                             string=reference)
+                    apps_worksheet.write(apps_index, 1, location)
+                    apps_worksheet.write(apps_index, 2, proposal)
+                    apps_index += 1
+                else:
+                    dec_worksheet.write_url(decs_index, 0, url=f"https://eastplanning.dorsetcouncil.gov.uk/{url}",
+                                            string=reference)
+                    dec_worksheet.write(decs_index, 1, location)
+                    dec_worksheet.write(decs_index, 2, proposal)
+                    dec_worksheet.write(decs_index, 3, decision)
+                    dec_worksheet.write(decs_index, 4, decision_date)
+                    decs_index += 1
+
+        def simple_output():
+            all_worksheet = workbook.add_worksheet(name="All")
+
+            index = 0
+
+            for data in applications:
+                values = [value for value in data.values()]
+                print(values)
+                reference, location, proposal, decision, decision_date, url, app = values
+
+                all_worksheet.write_url(index, 0, f"https://eastplanning.dorsetcouncil.gov.uk/{url}", string=reference)
+                index += 1
+                all_worksheet.write(index, 0, location)
+                index += 1
+                all_worksheet.write(index, 0, proposal)
+                index += 1
+
+                if decision:
+                    all_worksheet.write(index, 0, decision)
+                    index += 1
+                    all_worksheet.write(index, 0, decision_date)
+                    index += 1
+
+        if settings["simple_output"]:
+            simple_output()
+        else:
+            advanced_output()
 
         try:
             workbook.close()

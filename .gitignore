@@ -10,5 +10,3 @@ dev
 *.spec
 *.ifp
 
-log.txt
-errors.log
