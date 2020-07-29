@@ -13,6 +13,7 @@ import json
 with open("settings.json") as settings_file:
     settings = json.load(settings_file)
 
+
 class EDDCSearch(QRunnable):
     session = None
     pages = None
@@ -47,6 +48,7 @@ class EDDCSearch(QRunnable):
         self.signals.progress.emit(5)
 
         self.SearchRequest()
+
         self.signals.message.emit("Search results found...")
         self.signals.progress.emit(10)
 
@@ -169,7 +171,7 @@ class EDDCSearch(QRunnable):
             else:
                 prepared_request.update({key: value})
 
-        pprint(prepared_request)
+        # pprint(prepared_request)
         self.prepared_request = prepared_request
 
         # POST request parameters to the server
@@ -307,7 +309,7 @@ class EDDCSearch(QRunnable):
                                               data=prepared_request)
 
             if page_response.status_code != 200:
-                Log(f"Tried to open page {index-1} of results but got bad status code {page_response.status_code}")
+                Log(f"Tried to open page {index - 1} of results but got bad status code {page_response.status_code}")
 
             # Save the response content in dict
             self.HTTP_Responses[f"page={index}"] = page_response.content
@@ -390,7 +392,8 @@ class EDDCSearch(QRunnable):
                 reference, location, proposal, decision, decision_date, url, app = values
 
                 excluded = True
-                if not re.search(r"/T|/REG", reference) and re.search(r"BH21", location) and not re.search(r"BH21 6", location):
+                if not re.search(r"/T|/REG", reference) and re.search(r"BH21", location) and not re.search(r"BH21 6",
+                                                                                                           location):
                     excluded = False
 
                 if excluded:
@@ -455,4 +458,3 @@ class EDDCSearch(QRunnable):
             workbook.close()
         except xlsxwriter.workbook.FileCreateError:
             Log("Unable to write xlsx file as permission was denied by the OS")
-

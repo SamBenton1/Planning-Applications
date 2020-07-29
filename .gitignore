@@ -12,3 +12,4 @@ workbooks/*
 *.spec
 *.ifp
 
+test.py
