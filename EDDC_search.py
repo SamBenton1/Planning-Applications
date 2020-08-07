@@ -1,4 +1,3 @@
-from pprint import pprint
 import requests
 from bs4 import BeautifulSoup
 from PyQt5.QtCore import QRunnable
@@ -8,10 +7,6 @@ from datetime import date
 import xlsxwriter
 import re
 from issues import Log
-import json
-
-with open("settings.json") as settings_file:
-    settings = json.load(settings_file)
 
 
 class EDDCSearch(QRunnable):
@@ -22,10 +17,11 @@ class EDDCSearch(QRunnable):
     prepared_request = {}
     data_set = []
 
-    def __init__(self, request_data):
+    def __init__(self, request_data, settings):
         super(EDDCSearch, self).__init__()
         self.signals = SearchSignals()
         self.request = request_data
+        self.settings = settings
 
     def run(self):
         """
@@ -56,7 +52,7 @@ class EDDCSearch(QRunnable):
             ErrorSignal("An error occurred when collecting results. Check the log for more info.")
             return
 
-        if self.pages > settings["page_limit"]:
+        if self.pages > self.settings.max_pages:
             self.signals.too_many_results.emit(self.pages)
             ErrorSignal("Too many pages of results!")
             return
@@ -98,7 +94,8 @@ class EDDCSearch(QRunnable):
         copyright_accept_request.update({"ctl00$ContentPlaceHolder1$btnAccept": "Accept"})
 
         # ACCEPT TERMS
-        disclaimer_url = "https://eastplanning.dorsetcouncil.gov.uk/disclaimer.aspx?returnURL=%2f%3fAspxAutoDetectCookieSupport%3d1"
+        disclaimer_url = "https://eastplanning.dorsetcouncil.gov.uk/disclaimer.aspx?returnURL=%2f" \
+                         "%3fAspxAutoDetectCookieSupport%3d1 "
         terms_response = self.session.post(url=disclaimer_url,
                                            data=copyright_accept_request)
 
@@ -364,8 +361,7 @@ class EDDCSearch(QRunnable):
         return self.data_set
 
     # STEP 6
-    @staticmethod
-    def WriteXlSX(path, applications):
+    def WriteXlSX(self, path, applications):
         workbook = xlsxwriter.Workbook(path)
         bold = workbook.add_format({"bold": True})
         removed = workbook.add_format()
@@ -449,7 +445,7 @@ class EDDCSearch(QRunnable):
                     all_worksheet.write(index, 0, decision_date)
                     index += 1
 
-        if settings["simple_output"]:
+        if self.settings.simple:
             simple_output()
         else:
             advanced_output()
