@@ -31,6 +31,8 @@ data from the preceding columns. This cell also contains a hyperlink to the resu
 
 <img src="MD_images/example_concat.PNG">
 
+Note: When the spreadsheet is produced the cells are not automatically resized, hence the whole concatenated text may not be visible. The cells have to be resized manually by the user.
+
 
 ##### Settings *(New)*
 As of the most recent update, the settings for the application should no longer be edited directly from the
