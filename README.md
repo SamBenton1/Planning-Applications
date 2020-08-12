@@ -25,7 +25,14 @@ On the Applications and Decisions sheets, all the results that are not relevant 
 results which are wanted. These are split into the two sheets dependent on whether the search result
 was listed with a decision and decision date.
 
-##### Settings
+##### Concat *(New)*
+On the decisions and applications pages there is a "Concat" column which contains formatted, concatenated
+data from the preceding columns. This cell also contains a hyperlink to the results page it references.
+
+<img src="MD_images/example_concat.PNG">
+
+
+##### Settings *(New)*
 As of the most recent update, the settings for the application should no longer be edited directly from the
 settings.json. Instead they should be changed in-application through use of the "Settings" menu option. Which displays
 the settings dialog.

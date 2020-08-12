@@ -364,6 +364,8 @@ class EDDCSearch(QRunnable):
     def WriteXlSX(self, path, applications):
         workbook = xlsxwriter.Workbook(path)
         bold = workbook.add_format({"bold": True})
+        wrap = workbook.add_format()
+        wrap.set_text_wrap()
         removed = workbook.add_format()
         removed.set_font_color('red')
 
@@ -379,8 +381,8 @@ class EDDCSearch(QRunnable):
             HEADERS = ["Reference", "Location", "Proposal", "Decision", "Date"]
 
             all_worksheet.write_row(0, 0, data=HEADERS, cell_format=bold)
-            apps_worksheet.write_row(0, 0, HEADERS[:3], cell_format=bold)
-            dec_worksheet.write_row(0, 0, HEADERS, cell_format=bold)
+            apps_worksheet.write_row(0, 0, ["Reference", "Location", "Proposal", "Concat"], cell_format=bold)
+            dec_worksheet.write_row(0, 0, ["Reference", "Location", "Proposal", "Decision", "Concat"], cell_format=bold)
 
             for i, app in enumerate(applications):
                 values = [value for value in app.values()]
@@ -412,6 +414,11 @@ class EDDCSearch(QRunnable):
                                              string=reference)
                     apps_worksheet.write(apps_index, 1, location)
                     apps_worksheet.write(apps_index, 2, proposal)
+                    formula = '=HYPERLINK("{link}", _xlfn.CONCAT(A{i}&CHAR(10)&' \
+                              'B{i}&CHAR(10)&C{i}))'.format(link=f"https://eastplanning.dorsetcouncil.gov.uk/{url}",
+                                                            i=apps_index + 1)
+
+                    apps_worksheet.write_formula(apps_index, 3, formula, wrap)
                     apps_index += 1
                 else:
                     dec_worksheet.write_url(decs_index, 0, url=f"https://eastplanning.dorsetcouncil.gov.uk/{url}",
@@ -419,7 +426,15 @@ class EDDCSearch(QRunnable):
                     dec_worksheet.write(decs_index, 1, location)
                     dec_worksheet.write(decs_index, 2, proposal)
                     dec_worksheet.write(decs_index, 3, decision)
-                    dec_worksheet.write(decs_index, 4, decision_date)
+                    # Decision date removed as not needed
+                    # dec_worksheet.write(decs_index, 4, decision_date)
+
+                    formula = '=HYPERLINK("{link}", _xlfn.CONCAT(A{i}&"    "&D{i}&CHAR(10)&' \
+                              'B{i}&CHAR(10)&C{i}))'.format(link=f"https://eastplanning.dorsetcouncil.gov.uk/{url}",
+                                                            i=decs_index+1)
+                    print(formula)
+
+                    dec_worksheet.write_formula(decs_index, 4, formula, wrap)
                     decs_index += 1
 
         def simple_output():
